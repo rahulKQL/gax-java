@@ -50,6 +50,7 @@ import java.util.List;
  *
  * <p>Package-private for internal use.
  */
+@Deprecated
 class BatchExecutor<RequestT, ResponseT>
     implements ThresholdBatchReceiver<Batch<RequestT, ResponseT>> {
 

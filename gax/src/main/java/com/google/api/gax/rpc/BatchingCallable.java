@@ -29,13 +29,19 @@
  */
 package com.google.api.gax.rpc;
 
+import com.google.api.core.ApiFunction;
 import com.google.api.core.ApiFuture;
+import com.google.api.core.ApiFutures;
 import com.google.api.core.InternalApi;
-import com.google.api.gax.batching.FlowController.FlowControlException;
-import com.google.api.gax.batching.FlowController.FlowControlRuntimeException;
+import com.google.api.gax.batching.Batcher;
 import com.google.api.gax.batching.PartitionKey;
-import com.google.api.gax.batching.ThresholdBatcher;
 import com.google.common.base.Preconditions;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 
 /**
  * A {@link UnaryCallable} which will batch requests based on the given BatchingDescriptor and
@@ -45,15 +51,18 @@ import com.google.common.base.Preconditions;
  * <p>This is public only for technical reasons, for advanced usage.
  */
 @InternalApi("For use by transport-specific implementations")
-public class BatchingCallable<RequestT, ResponseT> extends UnaryCallable<RequestT, ResponseT> {
+public class BatchingCallable<EntryT, ResultT, RequestT, ResponseT> extends UnaryCallable<RequestT,
+    ResponseT> {
   private final UnaryCallable<RequestT, ResponseT> callable;
-  private final BatchingDescriptor<RequestT, ResponseT> batchingDescriptor;
-  private final BatcherFactory<RequestT, ResponseT> batcherFactory;
+  private final Map<PartitionKey, Batcher<EntryT, ResultT>> batchers = new ConcurrentHashMap<>();
+  private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor;
+  private final BatcherFactory<EntryT, ResultT, RequestT, ResponseT> batcherFactory;
+  private final Object lock = new Object();
 
   public BatchingCallable(
       UnaryCallable<RequestT, ResponseT> callable,
-      BatchingDescriptor<RequestT, ResponseT> batchingDescriptor,
-      BatcherFactory<RequestT, ResponseT> batcherFactory) {
+      BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor,
+      BatcherFactory<EntryT, ResultT, RequestT, ResponseT> batcherFactory) {
     this.callable = Preconditions.checkNotNull(callable);
     this.batchingDescriptor = Preconditions.checkNotNull(batchingDescriptor);
     this.batcherFactory = Preconditions.checkNotNull(batcherFactory);
@@ -61,22 +70,37 @@ public class BatchingCallable<RequestT, ResponseT> extends UnaryCallable<Request
 
   @Override
   public ApiFuture<ResponseT> futureCall(RequestT request, ApiCallContext context) {
-    if (batcherFactory.getBatchingSettings().getIsEnabled()) {
-      BatchedFuture<ResponseT> result = BatchedFuture.<ResponseT>create();
-      UnaryCallable<RequestT, ResponseT> unaryCallable = callable.withDefaultCallContext(context);
-      Batch<RequestT, ResponseT> batchableMessage =
-          new Batch<RequestT, ResponseT>(batchingDescriptor, request, unaryCallable, result);
-      PartitionKey partitionKey = batchingDescriptor.getBatchPartitionKey(request);
-      ThresholdBatcher<Batch<RequestT, ResponseT>> batcher =
-          batcherFactory.getPushingBatcher(partitionKey);
-      try {
-        batcher.add(batchableMessage);
-        return result;
-      } catch (FlowControlException e) {
-        throw FlowControlRuntimeException.fromFlowControlException(e);
-      }
-    } else {
-      return callable.futureCall(request, context);
+    PartitionKey key = batchingDescriptor.getPartitionKey(request);
+    Batcher<EntryT, ResultT> batcher = getPartitionKey(key);
+    List<ApiFuture<ResultT>> results = new ArrayList<>();
+    for(EntryT entry : batchingDescriptor.extractEntries(request)) {
+      results.add(batcher.add(entry));
     }
+
+    return mergeResults(results);
+  }
+
+  private Batcher<EntryT, ResultT> getPartitionKey(PartitionKey partitionKey) {
+    Batcher<EntryT, ResultT> batcher = batchers.get(partitionKey);
+    if (batcher == null) {
+      synchronized (lock) {
+        batcher = batchers.get(partitionKey);
+        if (batcher == null) {
+          batcher = batcherFactory.createBatcher();
+          batchers.put(partitionKey, batcher);
+        }
+      }
+    }
+    return batcher;
+  }
+
+  private ApiFuture<ResponseT> mergeResults(List<ApiFuture<ResultT>> results) {
+    return ApiFutures
+        .transform(ApiFutures.allAsList(results), new ApiFunction<List<ResultT>, ResponseT>() {
+          @Override
+          public ResponseT apply(List<ResultT> input) {
+            return batchingDescriptor.mergeResults(input);
+          }
+        }, directExecutor());
   }
 }

@@ -48,11 +48,12 @@ import java.util.List;
  *
  * <p>This is public only for technical reasons, for advanced usage.
  */
+@Deprecated
 @InternalApi
 public class Batch<RequestT, ResponseT> {
   private final List<BatchedRequestIssuer<ResponseT>> requestIssuerList;
 
-  private final RequestBuilder<RequestT> requestBuilder;
+  private final RequestBuilder<RequestT, ResponseT> requestBuilder;
   private UnaryCallable<RequestT, ResponseT> callable;
   private long byteCount;
 
@@ -61,9 +62,9 @@ public class Batch<RequestT, ResponseT> {
       RequestT request,
       UnaryCallable<RequestT, ResponseT> callable,
       BatchedFuture<ResponseT> batchedFuture) {
-    this.requestBuilder = descriptor.getRequestBuilder();
+    this.requestBuilder = descriptor.newRequestBuilder(request);
     this.requestIssuerList = new ArrayList<>();
-    this.requestBuilder.appendRequest(request);
+    this.requestBuilder.add(request);
     this.callable = callable;
     this.requestIssuerList.add(
         new BatchedRequestIssuer<>(batchedFuture, descriptor.countElements(request)));
@@ -88,7 +89,7 @@ public class Batch<RequestT, ResponseT> {
 
   /** Merge the given batch into this batch. */
   public void merge(Batch<RequestT, ResponseT> batch) {
-    requestBuilder.appendRequest(batch.getRequest());
+    requestBuilder.add(batch.getRequest());
     requestIssuerList.addAll(batch.requestIssuerList);
     if (this.callable == null) {
       this.callable = batch.callable;

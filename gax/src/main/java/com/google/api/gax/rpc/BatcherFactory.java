@@ -30,6 +30,8 @@
 package com.google.api.gax.rpc;
 
 import com.google.api.core.InternalApi;
+import com.google.api.gax.batching.Batcher;
+import com.google.api.gax.batching.BatcherImpl;
 import com.google.api.gax.batching.BatchingFlowController;
 import com.google.api.gax.batching.BatchingSettings;
 import com.google.api.gax.batching.BatchingThreshold;
@@ -45,6 +47,7 @@ import com.google.common.collect.ImmutableList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
+import javax.xml.transform.Result;
 
 /**
  * A Factory class which, for each unique partitionKey, creates a trio including a ThresholdBatcher,
@@ -54,42 +57,38 @@ import java.util.concurrent.ScheduledExecutorService;
  * <p>This is public only for technical reasons, for advanced usage.
  */
 @InternalApi
-public final class BatcherFactory<RequestT, ResponseT> {
-  private final Map<PartitionKey, ThresholdBatcher<Batch<RequestT, ResponseT>>> batchers =
-      new ConcurrentHashMap<>();
+public final class BatcherFactory<EntryT, ResultT, RequestT, ResponseT> {
   private final ScheduledExecutorService executor;
-  private final BatchingDescriptor<RequestT, ResponseT> batchingDescriptor;
+  private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor;
   private final FlowController flowController;
   private final BatchingSettings batchingSettings;
+  private final UnaryCallable<RequestT, ResponseT> callable;
   private final Object lock = new Object();
 
   public BatcherFactory(
-      BatchingDescriptor<RequestT, ResponseT> batchingDescriptor,
+      BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor,
       BatchingSettings batchingSettings,
       ScheduledExecutorService executor,
-      FlowController flowController) {
+      FlowController flowController,
+      UnaryCallable<RequestT, ResponseT> callable) {
     this.batchingDescriptor = batchingDescriptor;
     this.batchingSettings = batchingSettings;
     this.executor = executor;
     this.flowController = flowController;
+    this.callable = callable;
   }
 
-  /**
-   * Provides the ThresholdBatcher corresponding to the given partitionKey, or constructs one if it
-   * doesn't exist yet. The implementation is thread-safe.
-   */
-  public ThresholdBatcher<Batch<RequestT, ResponseT>> getPushingBatcher(PartitionKey partitionKey) {
-    ThresholdBatcher<Batch<RequestT, ResponseT>> batcher = batchers.get(partitionKey);
-    if (batcher == null) {
-      synchronized (lock) {
-        batcher = batchers.get(partitionKey);
-        if (batcher == null) {
-          batcher = createBatcher(partitionKey);
-          batchers.put(partitionKey, batcher);
-        }
-      }
-    }
-    return batcher;
+  public Batcher<EntryT, ResultT> createBatcher() {
+    BatchingFlowController<EntryT> batchingFlowController =
+        new BatchingFlowController<>(flowController,
+        new BatchElementCounter<>(batchingDescriptor),
+        new BatchByteCounter<>(batchingDescriptor));
+    return BatcherImpl.<EntryT, ResultT, RequestT, ResponseT>newBuilder()
+        .setThresholds(getThresholds(batchingSettings))
+        .setBatchingDescriptor(batchingDescriptor)
+        .setFlowController(batchingFlowController)
+        //TODO: change design?? so that we dont have to send Callable inside new Batcher.
+        .setUnaryCallable(callable).build();
   }
 
   /**
@@ -102,47 +101,64 @@ public final class BatcherFactory<RequestT, ResponseT> {
     return batchingSettings;
   }
 
-  private ThresholdBatcher<Batch<RequestT, ResponseT>> createBatcher(PartitionKey partitionKey) {
-    BatchExecutor<RequestT, ResponseT> processor =
-        new BatchExecutor<>(batchingDescriptor, partitionKey);
-    BatchingFlowController<Batch<RequestT, ResponseT>> batchingFlowController =
-        new BatchingFlowController<>(
-            flowController,
-            new BatchElementCounter<>(batchingDescriptor),
-            new BatchByteCounter<RequestT, ResponseT>());
-    return ThresholdBatcher.<Batch<RequestT, ResponseT>>newBuilder()
-        .setThresholds(getThresholds(batchingSettings))
-        .setExecutor(executor)
-        .setMaxDelay(batchingSettings.getDelayThreshold())
-        .setReceiver(processor)
-        .setFlowController(batchingFlowController)
-        .setBatchMerger(new BatchMergerImpl<RequestT, ResponseT>())
-        .build();
+  /**
+   *
+   * <p>This is public only for technical reasons, for advanced usage.
+   */
+  @InternalApi
+  public BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> getBatchingDescriptor(){
+    return batchingDescriptor;
   }
 
-  private ImmutableList<BatchingThreshold<Batch<RequestT, ResponseT>>> getThresholds(
-      BatchingSettings batchingSettings) {
-    ImmutableList.Builder<BatchingThreshold<Batch<RequestT, ResponseT>>> listBuilder =
-        ImmutableList.builder();
+  private ImmutableList<BatchingThreshold<EntryT>> getThresholds(BatchingSettings batchingSettings){
+    ImmutableList.Builder<BatchingThreshold<EntryT>> listBuilder = ImmutableList.builder();
 
     if (batchingSettings.getElementCountThreshold() != null) {
-      ElementCounter<Batch<RequestT, ResponseT>> elementCounter =
+      ElementCounter<EntryT> elementCounter =
           new BatchElementCounter<>(batchingDescriptor);
 
-      BatchingThreshold<Batch<RequestT, ResponseT>> countThreshold =
+      BatchingThreshold<EntryT> countThreshold =
           new NumericThreshold<>(batchingSettings.getElementCountThreshold(), elementCounter);
       listBuilder.add(countThreshold);
     }
 
     if (batchingSettings.getRequestByteThreshold() != null) {
-      ElementCounter<Batch<RequestT, ResponseT>> requestByteCounter =
-          new BatchByteCounter<RequestT, ResponseT>();
+      ElementCounter<EntryT> requestByteCounter =
+          new BatchByteCounter<>(batchingDescriptor);
 
-      BatchingThreshold<Batch<RequestT, ResponseT>> byteThreshold =
+      BatchingThreshold<EntryT> byteThreshold =
           new NumericThreshold<>(batchingSettings.getRequestByteThreshold(), requestByteCounter);
       listBuilder.add(byteThreshold);
     }
 
     return listBuilder.build();
+  }
+
+  static class BatchElementCounter<EntryT, ResultT, RequestT, ResponseT>
+      implements ElementCounter<EntryT> {
+    private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor;
+
+    BatchElementCounter(BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor) {
+      this.batchingDescriptor = batchingDescriptor;
+    }
+
+    @Override
+    public long count(EntryT entry) {
+      return batchingDescriptor.countElements(entry);
+    }
+  }
+
+  //TODO: Is this correct??
+  static class BatchByteCounter<EntryT, ResultT, RequestT, ResponseT> implements ElementCounter<EntryT> {
+    private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor;
+
+    BatchByteCounter(BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor) {
+      this.batchingDescriptor = batchingDescriptor;
+    }
+
+    @Override
+    public long count(EntryT element) {
+      return batchingDescriptor.countBytes(element);
+    }
   }
 }

@@ -154,12 +154,14 @@ public class Callables {
       UnaryCallable<RequestT, ResponseT> innerCallable,
       BatchingCallSettings<RequestT, ResponseT> batchingCallSettings,
       ClientContext clientContext) {
-    BatcherFactory<RequestT, ResponseT> batcherFactory =
+    //TODO: How to handle 4 generic arguments?
+    BatcherFactory batcherFactory =
         new BatcherFactory<>(
             batchingCallSettings.getBatchingDescriptor(),
             batchingCallSettings.getBatchingSettings(),
             clientContext.getExecutor(),
-            batchingCallSettings.getFlowController());
+            batchingCallSettings.getFlowController(),
+            innerCallable);
     UnaryCallable<RequestT, ResponseT> callable =
         new BatchingCallable<>(
             innerCallable, batchingCallSettings.getBatchingDescriptor(), batcherFactory);

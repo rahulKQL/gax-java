@@ -29,10 +29,12 @@
  */
 package com.google.api.gax.rpc;
 
+import com.google.api.core.ApiFuture;
 import com.google.api.core.BetaApi;
 import com.google.api.gax.batching.PartitionKey;
 import com.google.api.gax.batching.RequestBuilder;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * Interface which represents an object that transforms request/response data for the purposes of
@@ -44,31 +46,41 @@ import java.util.Collection;
  * <p>This class is designed to be used by generated code.
  */
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
-public interface BatchingDescriptor<RequestT, ResponseT> {
+public interface BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> {
 
   /** Returns the value of the partition key for the given request. */
   PartitionKey getBatchPartitionKey(RequestT request);
 
   /** Get the Builder object for the request type RequestT. */
-  RequestBuilder<RequestT> getRequestBuilder();
+  RequestBuilder<EntryT, RequestT> getRequestBuilder();
+
+  /** Get the Builder object for the request type RequestT. */
+  RequestBuilder<EntryT, RequestT> newRequestBuilder(RequestT base);
 
   /**
    * Splits the result from a batched call into an individual setResponse call on each
    * RequestIssuer.
    */
-  void splitResponse(
-      ResponseT batchResponse, Collection<? extends BatchedRequestIssuer<ResponseT>> batch);
+  void splitResponse(ResponseT batchResponse, Collection<ApiFuture<ResultT>> batch);
 
   /**
    * Splits the exception that resulted from a batched call into an individual setException call on
    * each RequestIssuer.
    */
-  void splitException(
-      Throwable throwable, Collection<? extends BatchedRequestIssuer<ResponseT>> batch);
+  void splitException(Throwable throwable, Collection<ApiFuture<ResultT>> batch);
+
+  @Deprecated
+  PartitionKey getPartitionKey(RequestT request);
+
+  @Deprecated
+	ResponseT mergeResults(List<ResultT> results);
+
+  @Deprecated
+  List<EntryT> extractEntries(RequestT request);
 
   /** Returns the number of elements contained in this request. */
-  long countElements(RequestT request);
+  long countElements(EntryT entry);
 
   /** Returns the size in bytes of this request. */
-  long countBytes(RequestT request);
+  long countBytes(EntryT entry);
 }
