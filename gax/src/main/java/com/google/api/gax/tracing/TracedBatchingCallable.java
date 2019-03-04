@@ -46,18 +46,18 @@ import com.google.common.util.concurrent.MoreExecutors;
  */
 @BetaApi("The surface for tracing is not stable and might change in the future")
 @InternalApi("For internal use by google-cloud-java clients only")
-public class TracedBatchingCallable<RequestT, ResponseT>
+public class TracedBatchingCallable<EntryT, ResultT, RequestT, ResponseT>
     extends UnaryCallable<RequestT, ResponseT> {
   private final ApiTracerFactory tracerFactory;
   private final SpanName spanName;
-  private final BatchingDescriptor<RequestT, ResponseT> batchingDescriptor;
+  private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor;
   private final UnaryCallable<RequestT, ResponseT> innerCallable;
 
   public TracedBatchingCallable(
       UnaryCallable<RequestT, ResponseT> innerCallable,
       ApiTracerFactory tracerFactory,
       SpanName spanName,
-      BatchingDescriptor<RequestT, ResponseT> batchingDescriptor) {
+      BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor) {
     this.tracerFactory = tracerFactory;
     this.spanName = spanName;
     this.batchingDescriptor = batchingDescriptor;

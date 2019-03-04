@@ -38,21 +38,14 @@ import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.ElementCounter;
 import com.google.api.gax.batching.FlowController;
 import com.google.api.gax.batching.NumericThreshold;
-import com.google.api.gax.batching.PartitionKey;
-import com.google.api.gax.batching.ThresholdBatcher;
-import com.google.api.gax.rpc.Batch.BatchByteCounter;
-import com.google.api.gax.rpc.Batch.BatchElementCounter;
-import com.google.api.gax.rpc.Batch.BatchMergerImpl;
+import com.google.api.gax.batching.RequestBuilder;
 import com.google.common.collect.ImmutableList;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.xml.transform.Result;
 
 /**
  * A Factory class which, for each unique partitionKey, creates a trio including a ThresholdBatcher,
- * BatchExecutor, and ThresholdBatchingForwarder. The ThresholdBatchingForwarder pulls items from
- * the ThresholdBatcher and forwards them to the BatchExecutor for processing.
+ *, and ThresholdBatchingForwarder. The ThresholdBatchingForwarder pulls items from
+ * the ThresholdBatcher and forwards them to the for processing.
  *
  * <p>This is public only for technical reasons, for advanced usage.
  */
@@ -82,7 +75,9 @@ public final class BatcherFactory<EntryT, ResultT, RequestT, ResponseT> {
     BatchingFlowController<EntryT> batchingFlowController =
         new BatchingFlowController<>(flowController,
         new BatchElementCounter<>(batchingDescriptor),
-        new BatchByteCounter<>(batchingDescriptor));
+        new BatchByteCounter<>(batchingDescriptor)
+        );
+
     return BatcherImpl.<EntryT, ResultT, RequestT, ResponseT>newBuilder()
         .setThresholds(getThresholds(batchingSettings))
         .setBatchingDescriptor(batchingDescriptor)
@@ -111,8 +106,17 @@ public final class BatcherFactory<EntryT, ResultT, RequestT, ResponseT> {
   }
 
   private ImmutableList<BatchingThreshold<EntryT>> getThresholds(BatchingSettings batchingSettings){
-    ImmutableList.Builder<BatchingThreshold<EntryT>> listBuilder = ImmutableList.builder();
+    int elementCountThreshold = 10;
 
+    if (batchingSettings.getElementCountThreshold() != null) {
+      elementCountThreshold = batchingSettings.getElementCountThreshold().intValue();
+    }
+
+    ImmutableList.Builder<BatchingThreshold<EntryT>> listBuilder =
+        ImmutableList.builderWithExpectedSize(elementCountThreshold);
+
+    //TODO(rahulkql: In case of Batcher we will never cross threshold as request will come
+    // individually.
     if (batchingSettings.getElementCountThreshold() != null) {
       ElementCounter<EntryT> elementCounter =
           new BatchElementCounter<>(batchingDescriptor);
@@ -144,11 +148,12 @@ public final class BatcherFactory<EntryT, ResultT, RequestT, ResponseT> {
 
     @Override
     public long count(EntryT entry) {
-      return batchingDescriptor.countElements(entry);
+      RequestBuilder<EntryT, RequestT> reqBuilder = batchingDescriptor.getRequestBuilder();
+      reqBuilder.add(entry);
+      return batchingDescriptor.countElements(reqBuilder.build());
     }
   }
 
-  //TODO: Is this correct??
   static class BatchByteCounter<EntryT, ResultT, RequestT, ResponseT> implements ElementCounter<EntryT> {
     private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor;
 
@@ -158,7 +163,9 @@ public final class BatcherFactory<EntryT, ResultT, RequestT, ResponseT> {
 
     @Override
     public long count(EntryT element) {
-      return batchingDescriptor.countBytes(element);
+      RequestBuilder<EntryT, RequestT> reqBuilder = batchingDescriptor.getRequestBuilder();
+      reqBuilder.add(element);
+      return batchingDescriptor.countBytes(reqBuilder.build());
     }
   }
 }

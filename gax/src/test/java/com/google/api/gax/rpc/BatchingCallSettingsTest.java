@@ -47,9 +47,9 @@ public class BatchingCallSettingsTest {
   @Test
   public void testEmptyBuilder() {
     @SuppressWarnings("unchecked")
-    BatchingDescriptor<Integer, Integer> batchingDescriptor =
+    BatchingDescriptor<Integer, Integer, Integer, Integer> batchingDescriptor =
         Mockito.mock(BatchingDescriptor.class);
-    BatchingCallSettings.Builder<Integer, Integer> builder =
+    BatchingCallSettings.Builder<Integer, Integer, Integer, Integer> builder =
         BatchingCallSettings.newBuilder(batchingDescriptor);
 
     Truth.assertThat(builder.getBatchingDescriptor()).isSameAs(batchingDescriptor);
@@ -73,9 +73,9 @@ public class BatchingCallSettingsTest {
   @Test
   public void testBuilder() {
     @SuppressWarnings("unchecked")
-    BatchingDescriptor<Integer, Integer> batchingDescriptor =
+    BatchingDescriptor<Integer, Integer, Integer, Integer> batchingDescriptor =
         Mockito.mock(BatchingDescriptor.class);
-    BatchingCallSettings.Builder<Integer, Integer> builder =
+    BatchingCallSettings.Builder<Integer, Integer, Integer, Integer> builder =
         BatchingCallSettings.newBuilder(batchingDescriptor);
 
     BatchingSettings batchingSettings =
@@ -107,9 +107,9 @@ public class BatchingCallSettingsTest {
   @Test
   public void testBuilderFromSettings() throws Exception {
     @SuppressWarnings("unchecked")
-    BatchingDescriptor<Integer, Integer> batchingDescriptor =
+    BatchingDescriptor<Integer, Integer, Integer, Integer> batchingDescriptor =
         Mockito.mock(BatchingDescriptor.class);
-    BatchingCallSettings.Builder<Integer, Integer> builder =
+    BatchingCallSettings.Builder<Integer, Integer, Integer, Integer> builder =
         BatchingCallSettings.newBuilder(batchingDescriptor);
 
     BatchingSettings batchingSettings =
@@ -136,9 +136,9 @@ public class BatchingCallSettingsTest {
   @Test
   public void testNoFlowControlSettings() throws Exception {
     @SuppressWarnings("unchecked")
-    BatchingDescriptor<Integer, Integer> batchingDescriptor =
+    BatchingDescriptor<Integer, Integer, Integer, Integer> batchingDescriptor =
         Mockito.mock(BatchingDescriptor.class);
-    BatchingCallSettings.Builder<Integer, Integer> builder =
+    BatchingCallSettings.Builder<Integer, Integer, Integer, Integer> builder =
         BatchingCallSettings.newBuilder(batchingDescriptor);
 
     BatchingSettings batchingSettings =

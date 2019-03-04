@@ -32,10 +32,10 @@ package com.google.api.gax.rpc.testing;
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.core.InternalApi;
+import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.batching.PartitionKey;
 import com.google.api.gax.batching.RequestBuilder;
 import com.google.api.gax.rpc.ApiCallContext;
-import com.google.api.gax.rpc.BatchedRequestIssuer;
 import com.google.api.gax.rpc.BatchingDescriptor;
 import com.google.api.gax.rpc.UnaryCallable;
 import java.util.ArrayList;
@@ -57,6 +57,10 @@ public class FakeBatchableApi {
     public LabeledIntList(String label, List<Integer> ints) {
       this.label = label;
       this.ints = ints;
+    }
+
+    public void add(Integer number){
+      this.ints.add(number);
     }
 
     @Override
@@ -102,25 +106,20 @@ public class FakeBatchableApi {
   public static SquarerBatchingDescriptor SQUARER_BATCHING_DESC = new SquarerBatchingDescriptor();
 
   public static class SquarerBatchingDescriptor
-      implements BatchingDescriptor<LabeledIntList, List<Integer>> {
+      implements BatchingDescriptor<Integer, Integer, LabeledIntList, List<Integer>> {
 
     @Override
-    public PartitionKey getBatchPartitionKey(LabeledIntList request) {
-      return new PartitionKey(request.label);
-    }
-
-    @Override
-    public RequestBuilder<LabeledIntList> getRequestBuilder() {
-      return new RequestBuilder<LabeledIntList>() {
+    public RequestBuilder<Integer, LabeledIntList> getRequestBuilder() {
+      return new RequestBuilder<Integer, LabeledIntList>() {
 
         LabeledIntList list;
 
         @Override
-        public void appendRequest(LabeledIntList request) {
+        public void add(Integer request) {
           if (list == null) {
-            list = request;
+            list = new LabeledIntList("", request);
           } else {
-            list.ints.addAll(request.ints);
+            list.ints.add(request);
           }
         }
 
@@ -132,25 +131,34 @@ public class FakeBatchableApi {
     }
 
     @Override
-    public void splitResponse(
-        List<Integer> batchResponse,
-        Collection<? extends BatchedRequestIssuer<List<Integer>>> batch) {
-      int batchMessageIndex = 0;
-      for (BatchedRequestIssuer<List<Integer>> responder : batch) {
-        List<Integer> messageIds = new ArrayList<>();
-        long messageCount = responder.getMessageCount();
-        for (int i = 0; i < messageCount; i++) {
-          messageIds.add(batchResponse.get(batchMessageIndex));
-          batchMessageIndex += 1;
+    public RequestBuilder<Integer, LabeledIntList> newRequestBuilder(LabeledIntList base) {
+      final LabeledIntList newReq = new LabeledIntList(base.label, base.ints);
+      return new RequestBuilder<Integer, LabeledIntList>(){
+
+        @Override
+        public void add(Integer request) {
+          newReq.add(request);
         }
-        responder.setResponse(messageIds);
+
+        @Override
+        public LabeledIntList build() {
+          return newReq;
+        }
+      };
+    }
+
+    @Override
+    public void splitResponse(List<Integer> batchResponse, Collection<SettableApiFuture<Integer>> batch) {
+      int index = 0;
+      for(SettableApiFuture<Integer> response : batch){
+        response.set(batchResponse.get(index));
+        index++;
       }
     }
 
     @Override
-    public void splitException(
-        Throwable throwable, Collection<? extends BatchedRequestIssuer<List<Integer>>> batch) {
-      for (BatchedRequestIssuer<List<Integer>> responder : batch) {
+    public void splitException(Throwable throwable, Collection<SettableApiFuture<Integer>> batch) {
+      for (SettableApiFuture<Integer> responder : batch) {
         responder.setException(throwable);
       }
     }
@@ -169,6 +177,21 @@ public class FakeBatchableApi {
       // Limit the byte size to simulate merged messages having smaller serialized size that the
       // sum of their components
       return Math.min(counter, 5);
+    }
+
+    @Override
+    public PartitionKey getPartitionKey(LabeledIntList request) {
+      return new PartitionKey(request.label);
+    }
+
+    @Override
+    public List<Integer> mergeResults(List<Integer> results) {
+      return results;
+    }
+
+    @Override
+    public List<Integer> extractEntries(LabeledIntList request) {
+      return request.ints;
     }
   }
 }

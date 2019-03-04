@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 
@@ -74,6 +75,7 @@ public class BatchingCallable<EntryT, ResultT, RequestT, ResponseT> extends Unar
     Batcher<EntryT, ResultT> batcher = getPartitionKey(key);
     List<ApiFuture<ResultT>> results = new ArrayList<>();
     for(EntryT entry : batchingDescriptor.extractEntries(request)) {
+      System.out.println("Printing entry: " +  entry);
       results.add(batcher.add(entry));
     }
 

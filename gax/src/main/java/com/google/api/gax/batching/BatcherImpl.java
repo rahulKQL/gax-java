@@ -86,7 +86,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   }
 
   private IBatch<EntryT,ResultT> createBatch() {
-    return new BatcherHelper<>(callable, descriptor.getRequestBuilder(), descriptor, flowController);
+    return new BatcherHelper<>(callable, descriptor, flowController);
   }
 
   @Override
@@ -99,7 +99,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
 
   @Override
   public void close() {
-    currentOpenBatch.cancel();
+    currentOpenBatch.executeBatch();
   }
 
   private boolean isAnyThresholdReached(EntryT entry) {

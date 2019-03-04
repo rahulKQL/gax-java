@@ -76,21 +76,13 @@ public class BatcherFactoryTest {
             .setLimitExceededBehavior(LimitExceededBehavior.Ignore)
             .build();
     FlowController flowController = new FlowController(flowControlSettings);
-    BatcherFactory<LabeledIntList, List<Integer>> batcherFactory =
+    BatcherFactory<Integer, Integer, LabeledIntList, List<Integer>> batcherFactory =
         new BatcherFactory<>(
-            new SquarerBatchingDescriptor(), batchingSettings, batchingExecutor, flowController);
+            new SquarerBatchingDescriptor(), batchingSettings, batchingExecutor, flowController,
+            null);
+
+
     Truth.assertThat(batcherFactory.getBatchingSettings()).isSameAs(batchingSettings);
-
-    ThresholdBatcher<Batch<LabeledIntList, List<Integer>>> batcherFoo =
-        batcherFactory.getPushingBatcher(new PartitionKey("foo"));
-
-    ThresholdBatcher<Batch<LabeledIntList, List<Integer>>> batcherFoo2 =
-        batcherFactory.getPushingBatcher(new PartitionKey("foo"));
-
-    ThresholdBatcher<Batch<LabeledIntList, List<Integer>>> batcherBar =
-        batcherFactory.getPushingBatcher(new PartitionKey("bar"));
-
-    Truth.assertThat(batcherFoo).isSameAs(batcherFoo2);
-    Truth.assertThat(batcherFoo).isNotSameAs(batcherBar);
+    Truth.assertThat(batcherFactory.getBatchingDescriptor()).isSameAs(new SquarerBatchingDescriptor());
   }
 }

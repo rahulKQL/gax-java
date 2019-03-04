@@ -60,11 +60,11 @@ public class TracedBatchingCallableTest {
 
   @Mock private ApiTracerFactory tracerFactory;
   @Mock private ApiTracer tracer;
-  @Mock private BatchingDescriptor<String, String> batchingDescriptor;
+  @Mock private BatchingDescriptor<String, String, String, String> batchingDescriptor;
   @Mock private UnaryCallable<String, String> innerCallable;
   private SettableApiFuture<String> innerResult;
 
-  private TracedBatchingCallable<String, String> tracedBatchingCallable;
+  private TracedBatchingCallable<String, String, String, String> tracedBatchingCallable;
   private FakeCallContext callContext;
 
   @Before

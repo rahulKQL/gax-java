@@ -29,8 +29,10 @@
  */
 package com.google.api.gax.rpc;
 
+import com.google.api.core.AbstractApiFuture;
 import com.google.api.core.ApiFuture;
 import com.google.api.core.BetaApi;
+import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.batching.PartitionKey;
 import com.google.api.gax.batching.RequestBuilder;
 import java.util.Collection;
@@ -48,9 +50,6 @@ import java.util.List;
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
 public interface BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> {
 
-  /** Returns the value of the partition key for the given request. */
-  PartitionKey getBatchPartitionKey(RequestT request);
-
   /** Get the Builder object for the request type RequestT. */
   RequestBuilder<EntryT, RequestT> getRequestBuilder();
 
@@ -61,13 +60,13 @@ public interface BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> {
    * Splits the result from a batched call into an individual setResponse call on each
    * RequestIssuer.
    */
-  void splitResponse(ResponseT batchResponse, Collection<ApiFuture<ResultT>> batch);
+  void splitResponse(ResponseT batchResponse, Collection<SettableApiFuture<ResultT>> batch);
 
   /**
    * Splits the exception that resulted from a batched call into an individual setException call on
    * each RequestIssuer.
    */
-  void splitException(Throwable throwable, Collection<ApiFuture<ResultT>> batch);
+  void splitException(Throwable throwable, Collection<SettableApiFuture<ResultT>> batch);
 
   @Deprecated
   PartitionKey getPartitionKey(RequestT request);
@@ -79,8 +78,8 @@ public interface BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> {
   List<EntryT> extractEntries(RequestT request);
 
   /** Returns the number of elements contained in this request. */
-  long countElements(EntryT entry);
+  long countElements(RequestT entry);
 
   /** Returns the size in bytes of this request. */
-  long countBytes(EntryT entry);
+  long countBytes(RequestT entry);
 }

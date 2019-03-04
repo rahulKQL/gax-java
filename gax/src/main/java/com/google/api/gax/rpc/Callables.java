@@ -30,6 +30,8 @@
 package com.google.api.gax.rpc;
 
 import com.google.api.core.BetaApi;
+import com.google.api.gax.batching.Batcher;
+import com.google.api.gax.batching.BatcherImpl;
 import com.google.api.gax.batching.BatchingSettings;
 import com.google.api.gax.longrunning.OperationResponsePollAlgorithm;
 import com.google.api.gax.longrunning.OperationSnapshot;
@@ -38,6 +40,7 @@ import com.google.api.gax.retrying.RetryAlgorithm;
 import com.google.api.gax.retrying.RetrySettings;
 import com.google.api.gax.retrying.ScheduledRetryingExecutor;
 import com.google.api.gax.retrying.StreamingRetryAlgorithm;
+import io.opencensus.common.ExperimentalApi;
 import java.util.Collection;
 
 /**
@@ -122,26 +125,26 @@ public class Callables {
    * @return {@link UnaryCallable} callable object.
    */
   @BetaApi("The surface for batching is not stable yet and may change in the future.")
-  public static <RequestT, ResponseT> UnaryCallable<RequestT, ResponseT> batching(
+  public static <EntryT, ResultT, RequestT, ResponseT> UnaryCallable<RequestT, ResponseT> batching(
       UnaryCallable<RequestT, ResponseT> innerCallable,
-      BatchingCallSettings<RequestT, ResponseT> batchingCallSettings,
+      BatchingCallSettings<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
       ClientContext context) {
     return batchingImpl(innerCallable, batchingCallSettings, context).unaryCallable;
   }
 
   /** This only exists to give tests access to batcherFactory for flushing purposes. */
-  static class BatchingCreateResult<RequestT, ResponseT> {
-    private final BatcherFactory<RequestT, ResponseT> batcherFactory;
+  static class BatchingCreateResult<EntryT, ResultT, RequestT, ResponseT> {
+    private final BatcherFactory<EntryT, ResultT, RequestT, ResponseT> batcherFactory;
     private final UnaryCallable<RequestT, ResponseT> unaryCallable;
 
     private BatchingCreateResult(
-        BatcherFactory<RequestT, ResponseT> batcherFactory,
+        BatcherFactory<EntryT, ResultT, RequestT, ResponseT> batcherFactory,
         UnaryCallable<RequestT, ResponseT> unaryCallable) {
       this.batcherFactory = batcherFactory;
       this.unaryCallable = unaryCallable;
     }
 
-    public BatcherFactory<RequestT, ResponseT> getBatcherFactory() {
+    public BatcherFactory<EntryT, ResultT, RequestT, ResponseT> getBatcherFactory() {
       return batcherFactory;
     }
 
@@ -150,12 +153,13 @@ public class Callables {
     }
   }
 
-  static <RequestT, ResponseT> BatchingCreateResult<RequestT, ResponseT> batchingImpl(
+  static <EntryT, ResultT, RequestT, ResponseT> BatchingCreateResult<EntryT, ResultT, RequestT,
+      ResponseT> batchingImpl(
       UnaryCallable<RequestT, ResponseT> innerCallable,
-      BatchingCallSettings<RequestT, ResponseT> batchingCallSettings,
+      BatchingCallSettings<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
       ClientContext clientContext) {
-    //TODO: How to handle 4 generic arguments?
-    BatcherFactory batcherFactory =
+
+    BatcherFactory<EntryT, ResultT, RequestT, ResponseT>  batcherFactory =
         new BatcherFactory<>(
             batchingCallSettings.getBatchingDescriptor(),
             batchingCallSettings.getBatchingSettings(),
@@ -166,6 +170,23 @@ public class Callables {
         new BatchingCallable<>(
             innerCallable, batchingCallSettings.getBatchingDescriptor(), batcherFactory);
     return new BatchingCreateResult<>(batcherFactory, callable);
+  }
+
+  @ExperimentalApi
+  public static <EntryT, ResultT, RequestT, ResponseT> Batcher<EntryT, ResultT> singleBatcher(
+      UnaryCallable<RequestT, ResponseT> innerCallable,
+      BatchingCallSettings<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
+      ClientContext clientContext){
+
+    BatcherFactory<EntryT, ResultT, RequestT, ResponseT>  batcherFactory =
+        new BatcherFactory<>(
+            batchingCallSettings.getBatchingDescriptor(),
+            batchingCallSettings.getBatchingSettings(),
+            clientContext.getExecutor(),
+            batchingCallSettings.getFlowController(),
+            innerCallable);
+
+    return batcherFactory.createBatcher();
   }
 
   /**

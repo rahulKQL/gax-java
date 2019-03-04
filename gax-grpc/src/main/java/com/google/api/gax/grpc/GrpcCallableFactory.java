@@ -149,9 +149,9 @@ public class GrpcCallableFactory {
    * @return {@link UnaryCallable} callable object.
    */
   @BetaApi("The surface for batching is not stable yet and may change in the future.")
-  public static <RequestT, ResponseT> UnaryCallable<RequestT, ResponseT> createBatchingCallable(
+  public static <EntryT, ResultT, RequestT, ResponseT> UnaryCallable<RequestT, ResponseT> createBatchingCallable(
       GrpcCallSettings<RequestT, ResponseT> grpcCallSettings,
-      BatchingCallSettings<RequestT, ResponseT> batchingCallSettings,
+      BatchingCallSettings<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
       ClientContext clientContext) {
     UnaryCallable<RequestT, ResponseT> baseCallable =
         createBaseUnaryCallable(grpcCallSettings, batchingCallSettings, clientContext);

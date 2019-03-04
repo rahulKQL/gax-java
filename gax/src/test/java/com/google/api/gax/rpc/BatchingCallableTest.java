@@ -77,11 +77,12 @@ public class BatchingCallableTest {
             .setLimitExceededBehavior(LimitExceededBehavior.Ignore)
             .build();
     FlowController flowController = new FlowController(flowControlSettings);
-    BatcherFactory<LabeledIntList, List<Integer>> batcherFactory =
+    BatcherFactory<Integer, Integer, LabeledIntList, List<Integer>> batcherFactory =
         new BatcherFactory<>(
-            new SquarerBatchingDescriptor(), batchingSettings, batchingExecutor, flowController);
+            new SquarerBatchingDescriptor(), batchingSettings, batchingExecutor, flowController,
+            FakeBatchableApi.callLabeledIntSquarer);
 
-    BatchingCallable<LabeledIntList, List<Integer>> batchingCallable =
+    BatchingCallable<Integer, Integer, LabeledIntList, List<Integer>> batchingCallable =
         new BatchingCallable<>(
             FakeBatchableApi.callLabeledIntSquarer,
             FakeBatchableApi.SQUARER_BATCHING_DESC,
@@ -116,11 +117,12 @@ public class BatchingCallableTest {
             .setLimitExceededBehavior(LimitExceededBehavior.Ignore)
             .build();
     FlowController flowController = new FlowController(flowControlSettings);
-    BatcherFactory<LabeledIntList, List<Integer>> batcherFactory =
+    BatcherFactory<Integer, Integer, LabeledIntList, List<Integer>> batcherFactory =
         new BatcherFactory<>(
-            new SquarerBatchingDescriptor(), batchingSettings, batchingExecutor, flowController);
+            new SquarerBatchingDescriptor(), batchingSettings, batchingExecutor, flowController,
+            FakeBatchableApi.callLabeledIntSquarer);
 
-    BatchingCallable<LabeledIntList, List<Integer>> batchingCallable =
+    BatchingCallable<Integer, Integer, LabeledIntList, List<Integer>> batchingCallable =
         new BatchingCallable<>(
             FakeBatchableApi.callLabeledIntSquarer,
             FakeBatchableApi.SQUARER_BATCHING_DESC,
