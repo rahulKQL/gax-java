@@ -30,6 +30,8 @@
 package com.google.api.gax.rpc.testing;
 
 import com.google.api.core.InternalApi;
+import com.google.api.gax.batching.v2.Batcher;
+import com.google.api.gax.batching.v2.BatchingCallSettingsV2;
 import com.google.api.gax.longrunning.OperationSnapshot;
 import com.google.api.gax.rpc.BatchingCallSettings;
 import com.google.api.gax.rpc.BidiStreamingCallable;
@@ -214,5 +216,27 @@ public class FakeCallableFactory {
           StreamingCallSettings<RequestT, ResponseT> streamingCallSettings,
           ClientContext clientContext) {
     return innerCallable.withDefaultCallContext(FakeCallContext.create(clientContext));
+  }
+
+
+  public static <EntryT, ResultT, RequestT, ResponseT> Batcher<EntryT, ResultT> createBatcher(
+      UnaryCallable<RequestT, ResponseT> innerCallable,
+      BatchingCallSettingsV2<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
+      ClientContext clientContext) {
+    return Callables.createBatcher(innerCallable, batchingCallSettings, clientContext);
+  }
+
+  public static <EntryT, ResultT, RequestT, ResponseT> UnaryCallable<RequestT, ResponseT> createBatchingCallableV2(
+      UnaryCallable<RequestT, ResponseT> innerCallable,
+      BatchingCallSettingsV2<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
+      ClientContext clientContext) {
+
+    UnaryCallable<RequestT, ResponseT> callable =
+        new FakeExceptionCallable<>(innerCallable, batchingCallSettings.getRetryableCodes());
+    callable = Callables.retrying(callable, batchingCallSettings, clientContext);
+
+    UnaryCallable<RequestT, ResponseT> batchingCallable =
+        Callables.batchingV2(callable, batchingCallSettings, clientContext);
+    return batchingCallable.withDefaultCallContext(FakeCallContext.create(clientContext));
   }
 }

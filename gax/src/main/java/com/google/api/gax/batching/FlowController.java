@@ -41,6 +41,25 @@ public class FlowController {
     private FlowControlException() {}
   }
 
+  public static class BatchingException extends RuntimeException {
+    private BatchingException(FlowControlException e) {
+      super(e);
+    }
+
+    private BatchingException(Exception e){
+      super(e);
+    }
+
+    public static BatchingException fromFlowControlException(FlowControlException e) {
+      return new BatchingException(e);
+    }
+
+    public static BatchingException fromException(Exception ex){
+      return new BatchingException(ex);
+    }
+  }
+
+
   /**
    * Runtime exception that can be used in place of FlowControlException when an unchecked exception
    * is required.
