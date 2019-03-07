@@ -43,6 +43,7 @@ import com.google.api.gax.retrying.RetryAlgorithm;
 import com.google.api.gax.retrying.RetrySettings;
 import com.google.api.gax.retrying.ScheduledRetryingExecutor;
 import com.google.api.gax.retrying.StreamingRetryAlgorithm;
+import io.opencensus.common.ExperimentalApi;
 import java.util.Collection;
 
 /**
@@ -171,56 +172,59 @@ public class Callables {
     return new BatchingCreateResult<>(batcherFactory, callable);
   }
 
+  /**
+   * Creates a {@link Batcher} to batch number of {@link EntryT} objects.
+   *
+   * @param innerCallable the callable to issue calls
+   * @param batchingCallSettings {@link BatchingSettings} to configure the batching related settings
+   *     with.
+   * @param clientContext {@link ClientContext} to use to connect to the service.
+   * @return {@link UnaryCallable} callable object.
+   */
+  @BetaApi("The surface for batcher is not stable yet and may change in the future.")
   public static <EntryT, ResultT, RequestT, ResponseT> Batcher<EntryT, ResultT> createBatcher(
       UnaryCallable<RequestT, ResponseT> innerCallable,
       BatchingCallSettingsV2<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
       ClientContext clientContext) {
+    UnaryCallable<RequestT, ResponseT> defaultCallable =
+        innerCallable.withDefaultCallContext(clientContext.getDefaultCallContext());
     BatcherFactoryV2<EntryT, ResultT, RequestT, ResponseT> batcherFactory =
         new BatcherFactoryV2<>(
             batchingCallSettings.getBatchingDescriptorV2(),
             batchingCallSettings.getBatchingSettings(),
             clientContext.getExecutor(),
             batchingCallSettings.getFlowController(),
-            innerCallable);
+            defaultCallable);
     return batcherFactory.createBatcher();
   }
 
+  /**
+   * Create a callable object that represents new batching API method. which internally usage
+   * {@link BatcherFactoryV2#createBatcher()}
+   *
+   * @param innerCallable the callable to issue calls
+   * @param batchingCallSettings {@link BatchingSettings} to configure the batching related settings
+   *     with.
+   * @param clientContext {@link ClientContext} to use to connect to the service.
+   * @return {@link UnaryCallable} callable object.
+   */
+  @BetaApi("The surface for unary callable is not stable yet and may change in the future.")
   public static <EntryT, ResultT, RequestT, ResponseT> UnaryCallable<RequestT, ResponseT> batchingV2(
       UnaryCallable<RequestT, ResponseT> innerCallable,
       BatchingCallSettingsV2<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
       ClientContext clientContext) {
+
     BatchingDescriptorV2<EntryT, ResultT, RequestT, ResponseT> descriptorV2 =
         batchingCallSettings.getBatchingDescriptorV2();
+    UnaryCallable<RequestT, ResponseT> defaultCallable =
+        innerCallable.withDefaultCallContext(clientContext.getDefaultCallContext());
     BatcherFactoryV2<EntryT, ResultT, RequestT, ResponseT> batcherFactory =
         new BatcherFactoryV2<>(descriptorV2,
             batchingCallSettings.getBatchingSettings(),
             clientContext.getExecutor(),
             batchingCallSettings.getFlowController(),
-            innerCallable);
-    UnaryCallable<RequestT, ResponseT> batchingCallable =
-        new BatchingCallableV2<>(innerCallable, descriptorV2, batcherFactory);
-    return new BatchingCreateResultV2<>(batcherFactory, batchingCallable).unaryCallable;
-  }
-
-  //TODO(rahulkql): I created this for accessing Map in BatcherCallable.
-  static class BatchingCreateResultV2<EntryT, ResultT, RequestT, ResponseT> {
-    private final BatcherFactoryV2<EntryT, ResultT, RequestT, ResponseT> batcherFactory;
-    private final UnaryCallable<RequestT, ResponseT> unaryCallable;
-
-    private BatchingCreateResultV2(
-        BatcherFactoryV2<EntryT, ResultT, RequestT, ResponseT> batcherFactory,
-        UnaryCallable<RequestT, ResponseT> unaryCallable) {
-      this.batcherFactory = batcherFactory;
-      this.unaryCallable = unaryCallable;
-    }
-
-    public BatcherFactoryV2<EntryT, ResultT, RequestT, ResponseT> getBatcherFactory() {
-      return batcherFactory;
-    }
-
-    public UnaryCallable<RequestT, ResponseT> getUnaryCallable() {
-      return unaryCallable;
-    }
+            defaultCallable);
+    return new BatchingCallableV2<>(descriptorV2, batcherFactory);
   }
 
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google LLC
+ * Copyright 2019 Google LLC
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -34,12 +34,7 @@ import com.google.api.core.ApiFutures;
 import com.google.api.core.InternalApi;
 import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.batching.PartitionKey;
-import com.google.api.gax.batching.RequestBuilder;
-import com.google.api.gax.batching.v2.BatchingDescriptorV2;
-import com.google.api.gax.batching.v2.RequestBuilderV2;
 import com.google.api.gax.rpc.ApiCallContext;
-import com.google.api.gax.rpc.BatchedRequestIssuer;
-import com.google.api.gax.rpc.BatchingDescriptor;
 import com.google.api.gax.rpc.UnaryCallable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -47,7 +42,7 @@ import java.util.Collection;
 import java.util.List;
 
 @InternalApi("for testing")
-public class FakeBatchableV2Api {
+public class FakeBatchableApiV2 {
 
   public static class LabeledIntList {
     public String label;
@@ -132,22 +127,6 @@ public class FakeBatchableV2Api {
     }
 
     @Override
-    public RequestBuilderV2<Integer, LabeledIntList> newRequestBuilder(LabeledIntList base) {
-      final LabeledIntList newReq = new LabeledIntList(base.label, base.ints);
-      return new RequestBuilderV2<Integer, LabeledIntList>() {
-        @Override
-        public void add(Integer request) {
-          newReq.ints.add(request);
-        }
-
-        @Override
-        public LabeledIntList build() {
-          return newReq;
-        }
-      };
-    }
-
-    @Override
     public void splitResponse(List<Integer> batchResponse,
         Collection<SettableApiFuture<Integer>> batch) {
       int index = 0;
@@ -180,27 +159,11 @@ public class FakeBatchableV2Api {
     }
 
     @Override
-    public long countElements(LabeledIntList request) {
-      return 0;
-    }
-
-    @Override
-    public long countBytes(LabeledIntList request) {
-      long counter = 0;
-      for (Integer i : request.ints) {
-        counter += i;
-      }
-      // Limit the byte size to simulate merged messages having smaller serialized size that the
-      // sum of their components
-      return Math.min(counter, 5);
-    }
-
-    @Override
     public long countByteEntry(Integer entry) {
+
       // Limit the byte size to simulate merged messages having smaller serialized size that the
       // sum of their components
-      byte[] bytes = String.valueOf(entry).getBytes();
-      return bytes.length;
+      return Math.min(entry, 5);
     }
   }
 }

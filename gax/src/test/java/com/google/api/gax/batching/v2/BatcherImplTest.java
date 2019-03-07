@@ -1,11 +1,38 @@
+/*
+ * Copyright 2019 Google LLC
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following disclaimer
+ * in the documentation and/or other materials provided with the
+ * distribution.
+ *     * Neither the name of Google LLC nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package com.google.api.gax.batching.v2;
 
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.gax.batching.BatchingSettings;
-import com.google.api.gax.rpc.ApiCallContext;
 import com.google.api.gax.rpc.ClientContext;
-import com.google.api.gax.rpc.UnaryCallable;
 import com.google.api.gax.rpc.testing.FakeCallContext;
 import com.google.api.gax.rpc.testing.FakeCallableFactory;
 import com.google.api.gax.rpc.testing.FakeChannel;
@@ -14,19 +41,17 @@ import com.google.common.truth.Truth;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.threeten.bp.Duration;
 
-import static com.google.api.gax.batching.v2.FakeBatchableV2Api.SQUARER_BATCHING_DESC_V2;
-import static com.google.api.gax.batching.v2.FakeBatchableV2Api.callLabeledIntSquarer;
+import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
 
 @RunWith(JUnit4.class)
 public class BatcherImplTest {
@@ -56,184 +81,68 @@ public class BatcherImplTest {
    * @throws Exception
    */
   @Test
-  public void bacherForSingleEntry() throws Exception {
+  public void bachingWithDelayThreshold() throws Exception {
+    long waitTime = 2L;
     BatchingSettings batchingSettings =
         BatchingSettings.newBuilder()
-            .setDelayThreshold(Duration.ofSeconds(1))
+            .setDelayThreshold(Duration.ofSeconds(waitTime))
+            .setRequestByteThreshold(null)
+            .setElementCountThreshold(11L)
             .build();
-    BatchingCallSettingsV2<Integer, Integer, FakeBatchableV2Api.LabeledIntList, List<Integer>>
+    BatchingCallSettingsV2<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>>
         batchingCallSettingsV2 =
-        BatchingCallSettingsV2.newBuilder(FakeBatchableV2Api.SQUARER_BATCHING_DESC_V2)
+        BatchingCallSettingsV2.newBuilder(FakeBatchableApiV2.SQUARER_BATCHING_DESC_V2)
             .setBatchingSettings(batchingSettings)
             .build();
     try(Batcher<Integer, Integer> batcher =
         FakeCallableFactory.createBatcher(
             callLabeledIntSquarer, batchingCallSettingsV2, clientContext)) {
 
-      ApiFuture<Integer> some = batcher.add(100);
-      List<ApiFuture<Integer>> results = new ArrayList<>();
+      // Running batch with a single entry object.
+      ApiFuture<Integer> singleResult = batcher.add(10);
+      // Before waiting for 2 sec, result will not be completed.
+      Truth.assertThat(singleResult.isDone()).isFalse();
 
-      //
-      for (int i = 0; i < 10; i+=2) {
+      // Allowing scheduler to trigger the flushing.
+      TimeUnit.SECONDS.sleep(waitTime);
+
+      // result should be in completed state now.
+      Truth.assertThat(singleResult.isDone()).isTrue();
+      Truth.assertThat(singleResult.get()).isEqualTo(100);
+    }
+  }
+
+
+  @Test
+  public void bacherWithElementThreshold() throws Exception {
+    BatchingSettings batchingSettings =
+        BatchingSettings.newBuilder()
+            .setDelayThreshold(Duration.ofSeconds(10))
+            .setRequestByteThreshold(null)
+            .setElementCountThreshold(5L)
+            .build();
+    BatchingCallSettingsV2<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>>
+        batchingCallSettingsV2 =
+        BatchingCallSettingsV2.newBuilder(FakeBatchableApiV2.SQUARER_BATCHING_DESC_V2)
+            .setBatchingSettings(batchingSettings)
+            .build();
+    try(Batcher<Integer, Integer> batcher =
+        FakeCallableFactory.createBatcher(
+            callLabeledIntSquarer, batchingCallSettingsV2, clientContext)) {
+
+      List<ApiFuture<Integer>> results = new ArrayList<>();
+      for (int i = 0; i < 4; i++) {
         results.add(batcher.add(i));
       }
-      ApiFuture<List<Integer>> transformedRes = ApiFutures.allAsList(results);
-      Truth.assertThat(transformedRes.get()).isEqualTo(Arrays.asList(0, 4, 16, 36, 64));
-    }
-  }
+      //As we have not crossed the element count threshold i.e. 5.
+      ApiFuture<List<Integer>> unCompleteResult = ApiFutures.allAsList(results);
+      Truth.assertThat(unCompleteResult.isDone()).isFalse();
 
-  @Test
-  public void batching() throws Exception {
-    BatchingSettings batchingSettings =
-        BatchingSettings.newBuilder()
-            .setDelayThreshold(Duration.ofSeconds(1))
-            .setElementCountThreshold(2L)
-            .build();
-    BatchingCallSettingsV2<Integer, Integer, FakeBatchableV2Api.LabeledIntList, List<Integer>> batchingCallSettings =
-        BatchingCallSettingsV2.newBuilder(SQUARER_BATCHING_DESC_V2)
-            .setBatchingSettings(batchingSettings)
-            .build();
-    UnaryCallable<FakeBatchableV2Api.LabeledIntList, List<Integer>> callable =
-        FakeCallableFactory.createBatchingCallableV2(
-            callLabeledIntSquarer, batchingCallSettings, clientContext);
-    ApiFuture<List<Integer>> f1 = callable.futureCall(new FakeBatchableV2Api.LabeledIntList("one", 1, 2));
-    ApiFuture<List<Integer>> f2 = callable.futureCall(new FakeBatchableV2Api.LabeledIntList("one", 3, 4));
-    Truth.assertThat(f1.get()).isEqualTo(Arrays.asList(1, 4));
-    Truth.assertThat(f2.get()).isEqualTo(Arrays.asList(9, 16));
-  }
-
-  /**
-   *
-   *
-   * BytesReserved and CallToReserve are coming differently than expected
-
-  //public void batchingWithFlowControl() throws Exception {
-   // BatchingSettings batchingSettings =
-   //     BatchingSettings.newBuilder()
-            .setDelayThreshold(Duration.ofSeconds(1))
-            .setElementCountThreshold(4L)
-            .setRequestByteThreshold(null)
-            .setFlowControlSettings(
-                FlowControlSettings.newBuilder()
-                    .setLimitExceededBehavior(FlowController.LimitExceededBehavior.Block)
-                    .setMaxOutstandingElementCount(10L)
-                    .setMaxOutstandingRequestBytes(10L)
-                    .build())
-            .build();
-    TrackedFlowController trackedFlowController =
-        new TrackedFlowController(batchingSettings.getFlowControlSettings());
-
-    Truth.assertThat(trackedFlowController.getElementsReserved()).isEqualTo(0);
-    Truth.assertThat(trackedFlowController.getElementsReleased()).isEqualTo(0);
-    Truth.assertThat(trackedFlowController.getBytesReserved()).isEqualTo(0);
-    Truth.assertThat(trackedFlowController.getBytesReleased()).isEqualTo(0);
-    Truth.assertThat(trackedFlowController.getCallsToReserve()).isEqualTo(0);
-    Truth.assertThat(trackedFlowController.getCallsToRelease()).isEqualTo(0);
-
-    FakeBatchableV2Api.LabeledIntList requestA = new FakeBatchableV2Api.LabeledIntList("one", 1, 2);
-    FakeBatchableV2Api.LabeledIntList requestB = new FakeBatchableV2Api.LabeledIntList("one", 3, 4);
-
-    BatchingCallSettingsV2<Integer, Integer, FakeBatchableV2Api.LabeledIntList, List<Integer>> batchingCallSettings =
-        BatchingCallSettingsV2.newBuilder(SQUARER_BATCHING_DESC_V2)
-            .setBatchingSettings(batchingSettings)
-            .setFlowController(trackedFlowController)
-            .build();
-    UnaryCallable<FakeBatchableV2Api.LabeledIntList, List<Integer>> callable =
-        Callables.batchingV2(callLabeledIntSquarer, batchingCallSettings, clientContext);
-    ApiFuture<List<Integer>> f1 =
-        callable.futureCall(requestA, FakeCallContext.createDefault());
-    ApiFuture<List<Integer>> f2 =
-        callable.futureCall(requestB, FakeCallContext.createDefault());
-
-    Truth.assertThat(f1.get()).isEqualTo(Arrays.asList(1, 4));
-    Truth.assertThat(f2.get()).isEqualTo(Arrays.asList(9, 16));
-
-    callable.futureCall(requestA).get();
-
-    // Check that the number of bytes is correct even when requests are merged, and the merged
-    // request consumes fewer bytes.
-    Truth.assertThat(trackedFlowController.getElementsReserved()).isEqualTo(4);
-    Truth.assertThat(trackedFlowController.getElementsReleased()).isEqualTo(4);
-    //Truth.assertThat(trackedFlowController.getBytesReserved()).isEqualTo(8);
-    //Truth.assertThat(trackedFlowController.getBytesReleased()).isEqualTo(8);
-    //Truth.assertThat(trackedFlowController.getCallsToReserve()).isEqualTo(2);
-    //Truth.assertThat(trackedFlowController.getCallsToRelease()).isEqualTo(1);
-  }
-   */
-
-  @Test
-  public void batchingDisabled() throws Exception {
-    BatchingSettings batchingSettings = BatchingSettings.newBuilder().setIsEnabled(false).build();
-
-    BatchingCallSettingsV2<Integer, Integer, FakeBatchableV2Api.LabeledIntList, List<Integer>> batchingCallSettings =
-        BatchingCallSettingsV2.newBuilder(SQUARER_BATCHING_DESC_V2)
-            .setBatchingSettings(batchingSettings)
-            .build();
-    UnaryCallable<FakeBatchableV2Api.LabeledIntList, List<Integer>> callable =
-        FakeCallableFactory.createBatchingCallableV2(
-            callLabeledIntSquarer, batchingCallSettings, clientContext);
-    ApiFuture<List<Integer>> f1 = callable.futureCall(new FakeBatchableV2Api.LabeledIntList("one", 1, 2));
-    ApiFuture<List<Integer>> f2 = callable.futureCall(new FakeBatchableV2Api.LabeledIntList("one", 3, 4));
-    Truth.assertThat(f1.get()).isEqualTo(Arrays.asList(1, 4));
-    Truth.assertThat(f2.get()).isEqualTo(Arrays.asList(9, 16));
-  }
-
-  @Test
-  public void batchingWithBlockingCallThreshold() throws Exception {
-    BatchingSettings batchingSettings =
-        BatchingSettings.newBuilder()
-            .setDelayThreshold(Duration.ofSeconds(1))
-            .setElementCountThreshold(2L)
-            .build();
-    BatchingCallSettingsV2<Integer, Integer, FakeBatchableV2Api.LabeledIntList, List<Integer>> batchingCallSettings =
-        BatchingCallSettingsV2.newBuilder(SQUARER_BATCHING_DESC_V2)
-            .setBatchingSettings(batchingSettings)
-            .build();
-    UnaryCallable<FakeBatchableV2Api.LabeledIntList, List<Integer>> callable =
-        FakeCallableFactory.createBatchingCallableV2(
-            callLabeledIntSquarer, batchingCallSettings, clientContext);
-    ApiFuture<List<Integer>> f1 = callable.futureCall(new FakeBatchableV2Api.LabeledIntList("one", 1));
-    ApiFuture<List<Integer>> f2 = callable.futureCall(new FakeBatchableV2Api.LabeledIntList("one", 3));
-    Truth.assertThat(f1.get()).isEqualTo(Arrays.asList(1));
-    Truth.assertThat(f2.get()).isEqualTo(Arrays.asList(9));
-  }
-
-  private static UnaryCallable<FakeBatchableV2Api.LabeledIntList, List<Integer>> callLabeledIntExceptionThrower =
-      new UnaryCallable<FakeBatchableV2Api.LabeledIntList, List<Integer>>() {
-        @Override
-        public ApiFuture<List<Integer>> futureCall(FakeBatchableV2Api.LabeledIntList request, ApiCallContext context) {
-          return ApiFutures.immediateFailedFuture(
-              new IllegalArgumentException("I FAIL!!"));
-        }
-      };
-
-  @Test
-  public void batchingException() throws Exception {
-    BatchingSettings batchingSettings =
-        BatchingSettings.newBuilder()
-            .setDelayThreshold(Duration.ofSeconds(1))
-            .setElementCountThreshold(2L)
-            .build();
-    BatchingCallSettingsV2<Integer, Integer, FakeBatchableV2Api.LabeledIntList, List<Integer>> batchingCallSettings =
-        BatchingCallSettingsV2.newBuilder(SQUARER_BATCHING_DESC_V2)
-            .setBatchingSettings(batchingSettings)
-            .build();
-    UnaryCallable<FakeBatchableV2Api.LabeledIntList, List<Integer>> callable =
-        FakeCallableFactory.createBatchingCallableV2(
-            callLabeledIntExceptionThrower, batchingCallSettings, clientContext);
-    ApiFuture<List<Integer>> f1 = callable.futureCall(new FakeBatchableV2Api.LabeledIntList("one", 1, 2));
-    ApiFuture<List<Integer>> f2 = callable.futureCall(new FakeBatchableV2Api.LabeledIntList("one", 3, 4));
-    try {
-      f1.get();
-      Assert.fail("Expected exception from batching call");
-    } catch (ExecutionException e) {
-      // expected
-    }
-    try {
-      f2.get();
-      Assert.fail("Expected exception from batching call");
-    } catch (ExecutionException e) {
-      // expected
+      // After this addition to batch, element count threshold will be reached.
+      results.add(batcher.add(10));
+      ApiFuture<List<Integer>> completedResult = ApiFutures.allAsList(results);
+      Truth.assertThat(completedResult.isDone()).isTrue();
+      Truth.assertThat(completedResult.get()).isEqualTo(Arrays.asList(0, 1, 4, 9, 100));
     }
   }
 }

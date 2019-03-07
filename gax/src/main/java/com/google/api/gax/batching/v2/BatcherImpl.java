@@ -1,6 +1,36 @@
+/*
+ * Copyright 2019 Google LLC
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following disclaimer
+ * in the documentation and/or other materials provided with the
+ * distribution.
+ *     * Neither the name of Google LLC nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 package com.google.api.gax.batching.v2;
 
 import com.google.api.core.ApiFuture;
+import com.google.api.core.BetaApi;
 import com.google.api.gax.batching.BatchingFlowController;
 import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.FlowController;
@@ -10,11 +40,17 @@ import com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import org.threeten.bp.Duration;
 
+/**
+ * Queues up elements until either a duration of time has passed or any threshold in a given set of
+ * thresholds is breached. then returned future gets completed.
+ */
+@BetaApi("The surface for batching is not stable yet and may change in the future.")
 public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batcher<EntryT,
     ResultT> {
 
@@ -28,7 +64,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   private final ReentrantLock lock = new ReentrantLock();
   private BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> currentOpenBatch;
 
-  private final Runnable pushCurrentBatchRunnable =
+  private final Runnable flushCurrentBatchRunnable =
       new Runnable() {
         @Override
         public void run() {
@@ -88,7 +124,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
       return this;
     }
 
-    /** Build the */
+    /** Build the BatcherImpl */
     public BatcherImpl<EntryT, ResultT, RequestT, ResponseT> build() {
       return new BatcherImpl<>(this);
     }
@@ -98,6 +134,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     return new Builder<>();
   }
 
+  /** {@inheritDoc} */
   @Override
   public ApiFuture<ResultT> add(EntryT entry) {
     lock.lock();
@@ -113,7 +150,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
 
       boolean anyThresholdReached = isAnyThresholdReached(entry);
       if (!anyThresholdReached) {
-        executor.schedule(pushCurrentBatchRunnable, maxDelay.toMillis(), TimeUnit.MILLISECONDS);
+        executor.schedule(flushCurrentBatchRunnable, maxDelay.toMillis(), TimeUnit.MILLISECONDS);
       }
 
       if (anyThresholdReached) {
@@ -127,12 +164,12 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     return response;
   }
 
+  /** {@inheritDoc} */
   @Override
   public void flush() {
     lock.lock();
     try{
       if(currentOpenBatch != null){
-        System.out.println("flush");
         currentOpenBatch.executeBatch();
         currentOpenBatch = null;
 
@@ -143,6 +180,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     }
   }
 
+  /** {@inheritDoc} */
   @Override
   public void close() {
     //TODO: Can not shutdown executor as batching might not have completed yet.
@@ -152,6 +190,10 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     }
   }
 
+  /**
+   * Returns a fresh {@link BatchAccumalator}, which collects entry request and process them in
+   * batches.
+   */
   private BatchAccumalator<EntryT,ResultT, RequestT, ResponseT> createAccumalator() {
     return new BatchAccumalator<>(callable, descriptor, flowController);
   }

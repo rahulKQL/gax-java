@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Google LLC
+ * Copyright 2019 Google LLC
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -40,8 +40,8 @@ import com.google.common.base.Preconditions;
 import java.util.Set;
 
 /**
- * A settings class to configure a {@link com.google.api.gax.rpc.UnaryCallable} for calls to an API method that supports
- * batching. The settings are provided using an instance of {@link BatchingSettings}.
+ * A settings class to configure a {@link com.google.api.gax.rpc.UnaryCallable} for calls to an
+ * API method that supports batching. The settings are provided using an instance of {@link BatchingSettings}.
  */
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
 @InternalExtensionOnly
