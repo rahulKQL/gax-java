@@ -40,7 +40,6 @@ import com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -141,14 +140,15 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     ApiFuture<ResultT> response = null;
     try {
       flowController.reserve(entry);
-      if (currentOpenBatch == null) {
-        currentOpenBatch = createAccumalator();
-        response = currentOpenBatch.add(entry);
-      } else {
-        response = currentOpenBatch.add(entry);
-      }
 
       boolean anyThresholdReached = isAnyThresholdReached(entry);
+
+      if (currentOpenBatch == null) {
+        currentOpenBatch = createAccumalator();
+      }
+
+      response = currentOpenBatch.add(entry);
+
       if (!anyThresholdReached) {
         executor.schedule(flushCurrentBatchRunnable, maxDelay.toMillis(), TimeUnit.MILLISECONDS);
       }
@@ -183,8 +183,8 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   /** {@inheritDoc} */
   @Override
   public void close() {
-    //TODO: Can not shutdown executor as batching might not have completed yet.
-    //TODO: As awaitTermination will block all other task so simply adding shutdown.
+    //TODO: Would it be better to use awitTermination instead of direct shutdown?
+    // But awitTermination blocks the execution, which we might not want to do.
     if(!executor.isShutdown()){
       executor.shutdown();
     }

@@ -49,6 +49,9 @@ import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 public class BatchingCallableV2<EntryT, ResultT, RequestT, ResponseT>
     extends UnaryCallable<RequestT, ResponseT> {
 
+  // Reason: Batcher has it's own thresholds based on Entry objects, but to keep track of
+  // threshold with respect from wrapper Request.
+  //TODO(rahulkql): Added threshold to support wrapper request.
   private final List<BatchingThreshold<EntryT>> thresholds;
   private final Map<PartitionKey, Batcher<EntryT, ResultT>> batchers = new ConcurrentHashMap<>();
   private final BatchingDescriptorV2<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor;
@@ -68,6 +71,7 @@ public class BatchingCallableV2<EntryT, ResultT, RequestT, ResponseT>
   public ApiFuture<ResponseT> futureCall(RequestT request, ApiCallContext context) {
     Batcher<EntryT, ResultT> batcher = getBatcher(request);
     List<ApiFuture<ResultT>> results = new ArrayList<>();
+
     for(EntryT entry : batchingDescriptor.extractEntries(request)) {
 
       boolean anyThresholdReached = isAnyThresholdReached(entry);
