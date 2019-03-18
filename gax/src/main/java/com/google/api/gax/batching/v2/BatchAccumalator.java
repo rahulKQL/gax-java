@@ -42,7 +42,7 @@ import java.util.List;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 
 /**
- * Accumulates entries in {@link RequestBuilderV2} and returns a future to the client. these
+ * Accumulates entries in {@link RequestBuilder} and returns a future to the client. these
  * future are resolved once #executeBatch has been triggered.
  */
 @InternalApi
@@ -50,14 +50,14 @@ public class BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> {
 
   private final UnaryCallable<RequestT, ResponseT> callable;
   private final List<SettableApiFuture<ResultT>> collectedResults;
-  private final BatchingDescriptorV2<EntryT, ResultT, RequestT, ResponseT> descriptor;
+  private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> descriptor;
   private final BatchingFlowController<EntryT> flowController;
 
-  private RequestBuilderV2<EntryT, RequestT> requestBuilder;
+  private RequestBuilder<EntryT, RequestT> requestBuilder;
   private ApiFuture<ResponseT> responseFuture;
 
   public BatchAccumalator(UnaryCallable<RequestT, ResponseT> callable,
-      BatchingDescriptorV2<EntryT, ResultT, RequestT, ResponseT> descriptor,
+      BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> descriptor,
       BatchingFlowController<EntryT> flowController) {
     this.callable = callable;
     this.descriptor = descriptor;

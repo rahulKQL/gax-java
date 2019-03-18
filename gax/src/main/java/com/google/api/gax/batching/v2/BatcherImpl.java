@@ -58,20 +58,19 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   private final Duration maxDelay;
   private final UnaryCallable<RequestT, ResponseT> callable;
   private final BatchingFlowController<EntryT> flowController;
-  private final BatchingDescriptorV2<EntryT, ResultT, RequestT, ResponseT> descriptor;
+  private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> descriptor;
 
   private final ReentrantLock lock = new ReentrantLock();
   private BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> currentOpenBatch;
 
-  private final Runnable flushCurrentBatchRunnable =
-      new Runnable() {
-        @Override
-        public void run() {
-          flush();
-        }
-      };
+  private final Runnable flushCurrentBatchRunnable = new Runnable() {
+    @Override
+    public void run() {
+      flush();
+    }
+  };
 
-  private BatcherImpl(Builder<EntryT, ResultT, RequestT, ResponseT> builder){
+  private BatcherImpl(Builder<EntryT, ResultT, RequestT, ResponseT> builder) {
     this.thresholds = new ArrayList<>(builder.thresholds);
     this.executor = Preconditions.checkNotNull(builder.executor);
     this.maxDelay = Preconditions.checkNotNull(builder.maxDelay);
@@ -86,7 +85,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     private UnaryCallable<RequestT, ResponseT> callable;
     private BatchingFlowController<EntryT> flowController;
     private Duration maxDelay;
-    private BatchingDescriptorV2<EntryT, ResultT, RequestT, ResponseT> descriptor;
+    private BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> descriptor;
 
     private Builder(){}
 
@@ -118,7 +117,8 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
       return this;
     }
 
-    public Builder<EntryT, ResultT, RequestT, ResponseT> setBatchingDescriptor(BatchingDescriptorV2<EntryT, ResultT, RequestT, ResponseT> descriptor) {
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setBatchingDescriptor(
+        BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> descriptor) {
       this.descriptor = descriptor;
       return this;
     }
@@ -168,8 +168,8 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   @Override
   public void flush() {
     lock.lock();
-    try{
-      if(currentOpenBatch != null){
+    try {
+      if (currentOpenBatch != null) {
         currentOpenBatch.executeBatch();
         currentOpenBatch = null;
 
@@ -184,8 +184,8 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   @Override
   public void close() {
     //TODO: Would it be better to use awitTermination instead of direct shutdown?
-    // But awitTermination blocks the execution, which we might not want to do.
-    if(!executor.isShutdown()){
+    // But awitTermination blocks, which we might not want to do.
+    if (!executor.isShutdown()) {
       executor.shutdown();
     }
   }
@@ -194,7 +194,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
    * Returns a fresh {@link BatchAccumalator}, which collects entry request and process them in
    * batches.
    */
-  private BatchAccumalator<EntryT,ResultT, RequestT, ResponseT> createAccumalator() {
+  private BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> createAccumalator() {
     return new BatchAccumalator<>(callable, descriptor, flowController);
   }
 

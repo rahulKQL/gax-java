@@ -31,11 +31,6 @@ package com.google.api.gax.rpc;
 
 import com.google.api.core.BetaApi;
 import com.google.api.gax.batching.BatchingSettings;
-import com.google.api.gax.batching.v2.BatcherFactoryV2;
-import com.google.api.gax.batching.v2.Batcher;
-import com.google.api.gax.batching.v2.BatchingCallSettingsV2;
-import com.google.api.gax.batching.v2.BatchingCallableV2;
-import com.google.api.gax.batching.v2.BatchingDescriptorV2;
 import com.google.api.gax.longrunning.OperationResponsePollAlgorithm;
 import com.google.api.gax.longrunning.OperationSnapshot;
 import com.google.api.gax.retrying.ExponentialRetryAlgorithm;
@@ -43,7 +38,6 @@ import com.google.api.gax.retrying.RetryAlgorithm;
 import com.google.api.gax.retrying.RetrySettings;
 import com.google.api.gax.retrying.ScheduledRetryingExecutor;
 import com.google.api.gax.retrying.StreamingRetryAlgorithm;
-import io.opencensus.common.ExperimentalApi;
 import java.util.Collection;
 
 /**
@@ -170,61 +164,6 @@ public class Callables {
         new BatchingCallable<>(
             innerCallable, batchingCallSettings.getBatchingDescriptor(), batcherFactory);
     return new BatchingCreateResult<>(batcherFactory, callable);
-  }
-
-  /**
-   * Creates a {@link Batcher} to batch number of {@link EntryT} objects.
-   *
-   * @param innerCallable the callable to issue calls
-   * @param batchingCallSettings {@link BatchingSettings} to configure the batching related settings
-   *     with.
-   * @param clientContext {@link ClientContext} to use to connect to the service.
-   * @return {@link UnaryCallable} callable object.
-   */
-  @BetaApi("The surface for batcher is not stable yet and may change in the future.")
-  public static <EntryT, ResultT, RequestT, ResponseT> Batcher<EntryT, ResultT> createBatcher(
-      UnaryCallable<RequestT, ResponseT> innerCallable,
-      BatchingCallSettingsV2<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
-      ClientContext clientContext) {
-    UnaryCallable<RequestT, ResponseT> defaultCallable =
-        innerCallable.withDefaultCallContext(clientContext.getDefaultCallContext());
-    BatcherFactoryV2<EntryT, ResultT, RequestT, ResponseT> batcherFactory =
-        new BatcherFactoryV2<>(
-            batchingCallSettings.getBatchingDescriptorV2(),
-            batchingCallSettings.getBatchingSettings(),
-            clientContext.getExecutor(),
-            batchingCallSettings.getFlowController(),
-            defaultCallable);
-    return batcherFactory.createBatcher();
-  }
-
-  /**
-   * Create a callable object that represents new batching API method. which internally usage
-   * {@link BatcherFactoryV2#createBatcher()}
-   *
-   * @param innerCallable the callable to issue calls
-   * @param batchingCallSettings {@link BatchingSettings} to configure the batching related settings
-   *     with.
-   * @param clientContext {@link ClientContext} to use to connect to the service.
-   * @return {@link UnaryCallable} callable object.
-   */
-  @BetaApi("The surface for unary callable is not stable yet and may change in the future.")
-  public static <EntryT, ResultT, RequestT, ResponseT> UnaryCallable<RequestT, ResponseT> batchingV2(
-      UnaryCallable<RequestT, ResponseT> innerCallable,
-      BatchingCallSettingsV2<EntryT, ResultT, RequestT, ResponseT> batchingCallSettings,
-      ClientContext clientContext) {
-
-    BatchingDescriptorV2<EntryT, ResultT, RequestT, ResponseT> descriptorV2 =
-        batchingCallSettings.getBatchingDescriptorV2();
-    UnaryCallable<RequestT, ResponseT> defaultCallable =
-        innerCallable.withDefaultCallContext(clientContext.getDefaultCallContext());
-    BatcherFactoryV2<EntryT, ResultT, RequestT, ResponseT> batcherFactory =
-        new BatcherFactoryV2<>(descriptorV2,
-            batchingCallSettings.getBatchingSettings(),
-            clientContext.getExecutor(),
-            batchingCallSettings.getFlowController(),
-            defaultCallable);
-    return new BatchingCallableV2<>(descriptorV2, batcherFactory);
   }
 
   /**

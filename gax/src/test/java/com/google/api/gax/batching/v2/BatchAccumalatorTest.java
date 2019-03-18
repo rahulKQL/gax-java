@@ -56,9 +56,9 @@ public class BatchAccumalatorTest {
             .setLimitExceededBehavior(FlowController.LimitExceededBehavior.Ignore)
             .build();
     BatchingFlowController<Integer> batchingFlowController =
-        new BatchingFlowController<Integer>(new FlowController(flowControlSettings),
-            new BatcherFactoryV2.EntryCountThreshold<Integer>(),
-            new BatcherFactoryV2.EntryByteThreshold<>(SQUARER_BATCHING_DESC_V2));
+        new BatchingFlowController<>(new FlowController(flowControlSettings),
+            new FakeBatchableApiV2.RequestCounter<Integer>(),
+            new FakeBatchableApiV2.RequestByteCounter<>(SQUARER_BATCHING_DESC_V2));
 
     BatchAccumalator<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>> batchAccumalator =
         new BatchAccumalator<>(
@@ -93,9 +93,9 @@ public class BatchAccumalatorTest {
             .setLimitExceededBehavior(FlowController.LimitExceededBehavior.Ignore)
             .build();
     BatchingFlowController<Integer> batchingFlowController =
-        new BatchingFlowController<Integer>(new FlowController(flowControlSettings),
-            new BatcherFactoryV2.EntryCountThreshold<Integer>(),
-            new BatcherFactoryV2.EntryByteThreshold<>(SQUARER_BATCHING_DESC_V2));
+        new BatchingFlowController<>(new FlowController(flowControlSettings),
+            new FakeBatchableApiV2.RequestCounter<Integer>(),
+            new FakeBatchableApiV2.RequestByteCounter<>(SQUARER_BATCHING_DESC_V2));
 
     BatchAccumalator<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>> batchAccumalator =
         new BatchAccumalator<>(

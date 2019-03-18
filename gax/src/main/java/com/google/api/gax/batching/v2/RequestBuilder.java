@@ -32,7 +32,7 @@ package com.google.api.gax.batching.v2;
 import com.google.api.core.BetaApi;
 
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
-public interface RequestBuilderV2<EntryT, RequestT> {
+public interface RequestBuilder<EntryT, RequestT> {
 
   /** Adds entry object into client specific {@link RequestT} */
   void add(EntryT request);

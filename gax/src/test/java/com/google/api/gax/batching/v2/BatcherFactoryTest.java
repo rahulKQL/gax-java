@@ -29,12 +29,11 @@
  */
 package com.google.api.gax.batching.v2;
 
+import com.google.api.core.ApiFuture;
 import com.google.api.gax.batching.BatchingSettings;
-import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.FlowControlSettings;
 import com.google.api.gax.batching.FlowController;
 import com.google.common.truth.Truth;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import org.junit.After;
@@ -47,7 +46,7 @@ import org.threeten.bp.Duration;
 import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
 
 @RunWith(JUnit4.class)
-public class BatcherFactoryV2Test {
+public class BatcherFactoryTest {
 
   private ScheduledExecutorService batchingExecutor;
 
@@ -62,10 +61,11 @@ public class BatcherFactoryV2Test {
   }
 
   @Test
-  public void testBatcher() {
+  public void testBatcher() throws Exception{
+    //Setting long duration for DelayThreshold, so that it doesn't execute it before test finishes.
     BatchingSettings batchingSettings =
         BatchingSettings.newBuilder()
-            .setDelayThreshold(Duration.ofSeconds(1))
+            .setDelayThreshold(Duration.ofSeconds(1000))
             .setElementCountThreshold(2L)
             .setRequestByteThreshold(1010L)
             .build();
@@ -74,46 +74,23 @@ public class BatcherFactoryV2Test {
             .setLimitExceededBehavior(FlowController.LimitExceededBehavior.Ignore)
             .build();
     FlowController flowController = new FlowController(flowControlSettings);
-    BatcherFactoryV2 batcherFactory =
-        new BatcherFactoryV2<>(
-            new FakeBatchableApiV2.SquarerBatchingDescriptorV2(), batchingSettings, batchingExecutor
+    IBatcherFactory<Integer, Integer> batcherFactory =
+        new BatcherFactory<>(
+            new FakeBatchableApiV2.SquarerBatchingDescriptor(), batchingSettings, batchingExecutor
             , flowController, callLabeledIntSquarer);
-    Truth.assertThat(batcherFactory.getBatchingSettings()).isSameAs(batchingSettings);
-  }
+    try(Batcher<Integer, Integer> batcher = batcherFactory.createBatcher()){
+      // Running batch with a single entry object.
+      ApiFuture<Integer> singleResult = batcher.add(10);
 
-  @Test
-  public void testThresholdPresences() {
-    BatchingSettings batchingSettings =
-        BatchingSettings.newBuilder()
-            .setDelayThreshold(Duration.ofSeconds(1))
-            .setElementCountThreshold(null)
-            .setRequestByteThreshold(null)
-            .build();
-    FlowControlSettings flowControlSettings =
-        FlowControlSettings.newBuilder()
-            .setLimitExceededBehavior(FlowController.LimitExceededBehavior.Ignore)
-            .build();
-    FlowController flowController = new FlowController(flowControlSettings);
-    BatcherFactoryV2 batcherFactory =
-        new BatcherFactoryV2<>(
-            new FakeBatchableApiV2.SquarerBatchingDescriptorV2(), batchingSettings, batchingExecutor
-            , flowController, callLabeledIntSquarer);
+      // ElementCounter doesn't triggers before reaching thresholds.
+      Truth.assertThat(singleResult.isDone()).isFalse();
 
-    // There should not be any thresholds in case of null in batchingSettings.
-    List<BatchingThreshold<Integer>> emptyThreshold =
-        batcherFactory.getThresholds(batchingSettings);
-    Truth.assertThat(emptyThreshold).isEmpty();
+      ApiFuture<Integer> anotherResult = batcher.add(12);
 
-
-    BatchingSettings elementThresholdSettings =
-        BatchingSettings.newBuilder()
-            .setDelayThreshold(Duration.ofSeconds(1))
-            .setElementCountThreshold(1L)
-            .setRequestByteThreshold(2L)
-            .build();
-    // Both of the threshold should be present
-    List<BatchingThreshold<Integer>> elementCountThreshold =
-        batcherFactory.getThresholds(elementThresholdSettings);
-    Truth.assertThat(elementCountThreshold.size()).isEqualTo(2);
+      // Result should be completed now.
+      Truth.assertThat(singleResult.isDone()).isTrue();
+      Truth.assertThat(singleResult.get()).isEqualTo(100);
+      Truth.assertThat(anotherResult.get()).isEqualTo(144);
+    }
   }
 }

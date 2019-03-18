@@ -33,7 +33,7 @@ import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.core.InternalApi;
 import com.google.api.core.SettableApiFuture;
-import com.google.api.gax.batching.PartitionKey;
+import com.google.api.gax.batching.ElementCounter;
 import com.google.api.gax.rpc.ApiCallContext;
 import com.google.api.gax.rpc.UnaryCallable;
 import java.util.ArrayList;
@@ -97,16 +97,16 @@ public class FakeBatchableApiV2 {
     }
   }
 
-  public static SquarerBatchingDescriptorV2 SQUARER_BATCHING_DESC_V2 =
-      new SquarerBatchingDescriptorV2();
+  public static SquarerBatchingDescriptor SQUARER_BATCHING_DESC_V2 =
+      new SquarerBatchingDescriptor();
 
-  public static class SquarerBatchingDescriptorV2
-      implements BatchingDescriptorV2<Integer, Integer, LabeledIntList, List<Integer>> {
+  public static class SquarerBatchingDescriptor
+      implements BatchingDescriptor<Integer, Integer, LabeledIntList, List<Integer>> {
 
     @Override
-    public RequestBuilderV2<Integer, LabeledIntList> getRequestBuilder() {
+    public RequestBuilder<Integer, LabeledIntList> getRequestBuilder() {
 
-      return new RequestBuilderV2<Integer, LabeledIntList>() {
+      return new RequestBuilder<Integer, LabeledIntList>() {
 
         LabeledIntList list;
 
@@ -144,26 +144,34 @@ public class FakeBatchableApiV2 {
     }
 
     @Override
-    public PartitionKey getPartitionKey(LabeledIntList request) {
-      return new PartitionKey(request.label);
-    }
-
-    @Override
-    public List<Integer> mergeResults(List<Integer> results) {
-      return results;
-    }
-
-    @Override
-    public List<Integer> extractEntries(LabeledIntList request) {
-      return request.ints;
-    }
-
-    @Override
-    public long countByteEntry(Integer entry) {
+    public long countBytes(Integer entry) {
 
       // Limit the byte size to simulate merged messages having smaller serialized size that the
       // sum of their components
       return Math.min(entry, 5);
+    }
+  }
+
+  public static class RequestCounter<Integer> implements ElementCounter<Integer> {
+    @Override
+    public long count(Integer element) {
+      return 1;
+    }
+  }
+
+  public static class RequestByteCounter<Integer> implements ElementCounter<Integer> {
+
+    private BatchingDescriptor<Integer, Integer, LabeledIntList, List<java.lang.Integer>>
+        batchingDescriptor;
+
+    public RequestByteCounter(
+        BatchingDescriptor<Integer, Integer, LabeledIntList, List<java.lang.Integer>> batchingDescriptor) {
+      this.batchingDescriptor = batchingDescriptor;
+    }
+
+    @Override
+    public long count(Integer element) {
+      return batchingDescriptor.countBytes(element);
     }
   }
 }

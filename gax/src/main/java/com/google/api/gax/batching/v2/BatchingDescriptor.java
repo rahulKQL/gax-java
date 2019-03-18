@@ -31,9 +31,7 @@ package com.google.api.gax.batching.v2;
 
 import com.google.api.core.BetaApi;
 import com.google.api.core.SettableApiFuture;
-import com.google.api.gax.batching.PartitionKey;
 import java.util.Collection;
-import java.util.List;
 
 /**
  * Interface which represents an object that transforms  entry/result OR request/response data for
@@ -45,10 +43,10 @@ import java.util.List;
  * <p>This class is designed to be used by generated code.
  */
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
-public interface BatchingDescriptorV2 <EntryT, ResultT, RequestT, ResponseT> {
+public interface BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> {
 
   /** Get the Builder object for the request type RequestT. */
-  RequestBuilderV2<EntryT, RequestT> getRequestBuilder();
+  RequestBuilder<EntryT, RequestT> getRequestBuilder();
 
   /**
    * Splits the result from a batched call into an individual setResponse call on each
@@ -62,18 +60,6 @@ public interface BatchingDescriptorV2 <EntryT, ResultT, RequestT, ResponseT> {
    */
   void splitException(Throwable throwable, Collection<SettableApiFuture<ResultT>> batch);
 
-  /** Returns the value of the partition key for the given request. */
-  @Deprecated
-  PartitionKey getPartitionKey(RequestT request);
-
-  /** Merges multiple result corresponding to each result into response. */
-  @Deprecated
-  ResponseT mergeResults(List<ResultT> results);
-
-  /** Returns the list of the entry objects for the given request. */
-  @Deprecated
-  List<EntryT> extractEntries(RequestT request);
-
   /** Returns Counts bytes of a single entry object **/
-  long countByteEntry(EntryT entry);
+  long countBytes(EntryT entry);
 }
