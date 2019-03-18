@@ -42,8 +42,8 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * This class creates a fresh {@link Batcher}, which have fresh set of thresholds as List of
- * {@link NumericThreshold}.
+ * This class creates a fresh {@link Batcher}, which have fresh set of thresholds as List of {@link
+ * NumericThreshold}.
  *
  * <p>This is public only for technical reasons, for advanced usage.
  */
@@ -56,23 +56,73 @@ public class BatcherFactory<EntryT, ResultT, RequestT, ResponseT>
   private final BatchingSettings batchingSettings;
   private final UnaryCallable<RequestT, ResponseT> callable;
 
-  public BatcherFactory(
-      BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor,
-      BatchingSettings batchingSettings,
-      ScheduledExecutorService executor,
-      FlowController flowController,
-      UnaryCallable<RequestT, ResponseT> callable) {
-    this.batchingDescriptor = batchingDescriptor;
-    this.batchingSettings = batchingSettings;
-    this.executor = executor;
-    this.flowController = flowController;
-    this.callable = callable;
+  private BatcherFactory(Builder<EntryT, ResultT, RequestT, ResponseT> builder) {
+    this.batchingDescriptor = builder.batchingDescriptor;
+    this.batchingSettings = builder.batchingSettings;
+    this.executor = builder.executor;
+    this.flowController = builder.flowController;
+    this.callable = builder.callable;
   }
 
+  public static class Builder<EntryT, ResultT, RequestT, ResponseT> {
+    private ScheduledExecutorService executor;
+    private BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor;
+    private FlowController flowController;
+    private BatchingSettings batchingSettings;
+    private UnaryCallable<RequestT, ResponseT> callable;
+
+    /** Sets the executor for the ThresholdBatcher. */
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setExecutor(
+        ScheduledExecutorService executor) {
+      this.executor = executor;
+      return this;
+    }
+
+    /** Sets the BatchingDescriptor for EntryT & ResultT. */
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setBatchingDescriptor(
+        BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDescriptor) {
+      this.batchingDescriptor = batchingDescriptor;
+      return this;
+    }
+
+    /** Sets the FlowController, to be used for creating BatchingFlowController. */
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setFlowController(
+        FlowController flowController) {
+      this.flowController = flowController;
+      return this;
+    }
+
+    /** Sets the BatchingSettings, to be used for various threshold settings. */
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setBatchingSettings(
+        BatchingSettings batchingSettings) {
+      this.batchingSettings = batchingSettings;
+      return this;
+    }
+
+    /** Sets the UnaryCallable, to complete RPC. */
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setUnaryCallable(
+        UnaryCallable<RequestT, ResponseT> callable) {
+      this.callable = callable;
+      return this;
+    }
+
+    /** Builds the BatcherFactory */
+    public BatcherFactory<EntryT, ResultT, RequestT, ResponseT> build() {
+      return new BatcherFactory<>(this);
+    }
+  }
+
+  public static <EntryT, ResultT, RequestT, ResponseT>
+      Builder<EntryT, ResultT, RequestT, ResponseT> newBuilder() {
+    return new Builder<>();
+  }
+
+  /** {@inheritDoc} */
   @Override
   public Batcher<EntryT, ResultT> createBatcher() {
     BatchingFlowController<EntryT> batchingFlowController =
-        new BatchingFlowController<>(flowController,
+        new BatchingFlowController<>(
+            flowController,
             new EntryCountThreshold<EntryT>(),
             new EntryByteThreshold<>(batchingDescriptor));
 
@@ -87,8 +137,8 @@ public class BatcherFactory<EntryT, ResultT, RequestT, ResponseT>
   }
 
   /**
-   * Returns {@link List} of different thresholds based on values present in
-   * {@link BatchingSettings}.
+   * Returns {@link List} of different thresholds based on values present in {@link
+   * BatchingSettings}.
    *
    * <p>This is public only for technical reasons, for advanced usage.
    */
@@ -98,8 +148,7 @@ public class BatcherFactory<EntryT, ResultT, RequestT, ResponseT>
     final Long elementCount = batchingSettings.getElementCountThreshold();
     final Long byteCount = batchingSettings.getRequestByteThreshold();
     if (elementCount != null) {
-      ElementCounter<EntryT> elementCounter =
-          new EntryCountThreshold<>();
+      ElementCounter<EntryT> elementCounter = new EntryCountThreshold<>();
 
       BatchingThreshold<EntryT> countThreshold =
           new NumericThreshold<>(elementCount, elementCounter);
@@ -107,8 +156,7 @@ public class BatcherFactory<EntryT, ResultT, RequestT, ResponseT>
     }
 
     if (byteCount != null) {
-      ElementCounter<EntryT> requestByte =
-          new EntryByteThreshold<>(batchingDescriptor);
+      ElementCounter<EntryT> requestByte = new EntryByteThreshold<>(batchingDescriptor);
 
       BatchingThreshold<EntryT> byteThreshold = new NumericThreshold<>(byteCount, requestByte);
       listBuilder.add(byteThreshold);
@@ -117,8 +165,8 @@ public class BatcherFactory<EntryT, ResultT, RequestT, ResponseT>
   }
 
   /**
-   * As each Entry object will be considered one single element in the set, so it returns 1 for
-   * each count.
+   * As each Entry object will be considered one single element in the set, so it returns 1 for each
+   * count.
    *
    * <p>This is public only for technical reasons, for advanced usage.
    */

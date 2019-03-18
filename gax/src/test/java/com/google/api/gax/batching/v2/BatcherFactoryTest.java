@@ -29,11 +29,15 @@
  */
 package com.google.api.gax.batching.v2;
 
+import static com.google.api.gax.batching.v2.FakeBatchableApiV2.SQUARER_BATCHING_DESC_V2;
+import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
+
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.batching.BatchingSettings;
 import com.google.api.gax.batching.FlowControlSettings;
 import com.google.api.gax.batching.FlowController;
 import com.google.common.truth.Truth;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import org.junit.After;
@@ -42,8 +46,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.threeten.bp.Duration;
-
-import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
 
 @RunWith(JUnit4.class)
 public class BatcherFactoryTest {
@@ -61,7 +63,7 @@ public class BatcherFactoryTest {
   }
 
   @Test
-  public void testBatcher() throws Exception{
+  public void testBatcher() throws Exception {
     //Setting long duration for DelayThreshold, so that it doesn't execute it before test finishes.
     BatchingSettings batchingSettings =
         BatchingSettings.newBuilder()
@@ -75,10 +77,16 @@ public class BatcherFactoryTest {
             .build();
     FlowController flowController = new FlowController(flowControlSettings);
     IBatcherFactory<Integer, Integer> batcherFactory =
-        new BatcherFactory<>(
-            new FakeBatchableApiV2.SquarerBatchingDescriptor(), batchingSettings, batchingExecutor
-            , flowController, callLabeledIntSquarer);
-    try(Batcher<Integer, Integer> batcher = batcherFactory.createBatcher()){
+        BatcherFactory
+            .<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>>newBuilder()
+            .setExecutor(batchingExecutor)
+            .setBatchingDescriptor(SQUARER_BATCHING_DESC_V2)
+            .setFlowController(flowController)
+            .setBatchingSettings(batchingSettings)
+            .setUnaryCallable(callLabeledIntSquarer)
+            .build();
+
+    try (Batcher<Integer, Integer> batcher = batcherFactory.createBatcher()) {
       // Running batch with a single entry object.
       ApiFuture<Integer> singleResult = batcher.add(10);
 

@@ -34,7 +34,7 @@ import com.google.api.core.SettableApiFuture;
 import java.util.Collection;
 
 /**
- * Interface which represents an object that transforms  entry/result OR request/response data for
+ * Interface which represents an object that transforms entry/result OR request/response data for
  * the purposes of batching.
  *
  * <p>Implementations of BatchingDescriptorV2 must guarantee that all methods are stateless and
@@ -60,6 +60,6 @@ public interface BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> {
    */
   void splitException(Throwable throwable, Collection<SettableApiFuture<ResultT>> batch);
 
-  /** Returns Counts bytes of a single entry object **/
+  /** Returns Counts bytes of a single entry object * */
   long countBytes(EntryT entry);
 }

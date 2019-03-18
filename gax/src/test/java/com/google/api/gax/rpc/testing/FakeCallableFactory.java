@@ -222,6 +222,16 @@ public class FakeCallableFactory {
     return innerCallable.withDefaultCallContext(FakeCallContext.create(clientContext));
   }
 
+  /**
+   * Creates a batcher object with grpc-specific entries.
+   *
+   * @param innerCallable a {@link UnaryCallable} that performs rpc.
+   * @param batchingDesc a {@link BatchingDescriptor} that wraps entries & wrapper objects.
+   * @param batchingSettings {@link BatchingSettings} to configure the batching related * settings
+   *     with.
+   * @param clientContext {@link ClientContext} to use to connect to t
+   * @return a {@link Batcher} object.
+   */
   public static <EntryT, ResultT, RequestT, ResponseT> Batcher<EntryT, ResultT> createBatcher(
       UnaryCallable<RequestT, ResponseT> innerCallable,
       BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> batchingDesc,
@@ -231,8 +241,13 @@ public class FakeCallableFactory {
         innerCallable.withDefaultCallContext(clientContext.getDefaultCallContext());
     FlowController flowController = new FlowController(batchingSettings.getFlowControlSettings());
     IBatcherFactory<EntryT, ResultT> batcherFactory =
-        new BatcherFactory<>(batchingDesc, batchingSettings, clientContext.getExecutor(),
-            flowController, defaultCallable);
+        BatcherFactory.<EntryT, ResultT, RequestT, ResponseT>newBuilder()
+            .setExecutor(clientContext.getExecutor())
+            .setBatchingDescriptor(batchingDesc)
+            .setFlowController(flowController)
+            .setBatchingSettings(batchingSettings)
+            .setUnaryCallable(defaultCallable)
+            .build();
     return batcherFactory.createBatcher();
   }
 }

@@ -34,25 +34,20 @@ import com.google.api.core.ApiFuture;
 public interface Batcher<EntryT, ResultT> extends AutoCloseable {
 
   /**
-   * Accepts a single object and process into batch after either passing maxDelay or either of
-   * the thresholds are met.
+   * Accepts a single object and process into batch after either passing maxDelay or either of the
+   * thresholds are met.
    *
    * @param entry an {@link EntryT} object.
    * @return Returns an ApiFuture that completes once the batch has been processed by the batch
-   * receiver and the flow controller resources have been released.
-   *
-   * <p>Note that this future can complete for the current batch before previous batches have
-   * completed, so it cannot be depended upon for flushing.
+   *     receiver and the flow controller resources have been released.
+   *     <p>Note that this future can complete for the current batch before previous batches have
+   *     completed, so it cannot be depended upon for flushing.
    */
   ApiFuture<ResultT> add(EntryT entry);
 
-  /**
-   * Triggers batch to execute all the accumulated entries in a batch.
-   */
+  /** Triggers batch to execute all the accumulated entries in a batch. */
   void flush();
 
-  /**
-   * Closes the ScheduledExecutor if not shutdown yet.
-   */
+  /** Closes the ScheduledExecutor if not shutdown yet. */
   void close();
 }

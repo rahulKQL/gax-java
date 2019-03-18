@@ -29,6 +29,9 @@
  */
 package com.google.api.gax.batching.v2;
 
+import static com.google.api.gax.batching.v2.FakeBatchableApiV2.SQUARER_BATCHING_DESC_V2;
+import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
+
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.batching.BatchingFlowController;
 import com.google.api.gax.batching.FlowControlSettings;
@@ -40,31 +43,26 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import static com.google.api.gax.batching.v2.FakeBatchableApiV2.SQUARER_BATCHING_DESC_V2;
-import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
-
-/**
- * Junit for {@link BatchAccumalator}.
- */
+/** Junit for {@link BatchAccumalator}. */
 @RunWith(JUnit4.class)
 public class BatchAccumalatorTest {
 
   @Test
-  public void addAndExecuteBatch() throws Exception{
+  public void addAndExecuteBatch() throws Exception {
     FlowControlSettings flowControlSettings =
         FlowControlSettings.newBuilder()
             .setLimitExceededBehavior(FlowController.LimitExceededBehavior.Ignore)
             .build();
     BatchingFlowController<Integer> batchingFlowController =
-        new BatchingFlowController<>(new FlowController(flowControlSettings),
+        new BatchingFlowController<>(
+            new FlowController(flowControlSettings),
             new FakeBatchableApiV2.RequestCounter<Integer>(),
             new FakeBatchableApiV2.RequestByteCounter<>(SQUARER_BATCHING_DESC_V2));
 
-    BatchAccumalator<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>> batchAccumalator =
-        new BatchAccumalator<>(
-            callLabeledIntSquarer,
-            SQUARER_BATCHING_DESC_V2,
-            batchingFlowController);
+    BatchAccumalator<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>>
+        batchAccumalator =
+            new BatchAccumalator<>(
+                callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingFlowController);
 
     //Testing add operation for single entry
     ApiFuture<Integer> result_one = batchAccumalator.add(5);
@@ -87,21 +85,21 @@ public class BatchAccumalatorTest {
   }
 
   @Test
-  public void testWhenNoRequestAccumulated() throws Exception{
+  public void testWhenNoRequestAccumulated() throws Exception {
     FlowControlSettings flowControlSettings =
         FlowControlSettings.newBuilder()
             .setLimitExceededBehavior(FlowController.LimitExceededBehavior.Ignore)
             .build();
     BatchingFlowController<Integer> batchingFlowController =
-        new BatchingFlowController<>(new FlowController(flowControlSettings),
+        new BatchingFlowController<>(
+            new FlowController(flowControlSettings),
             new FakeBatchableApiV2.RequestCounter<Integer>(),
             new FakeBatchableApiV2.RequestByteCounter<>(SQUARER_BATCHING_DESC_V2));
 
-    BatchAccumalator<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>> batchAccumalator =
-        new BatchAccumalator<>(
-            callLabeledIntSquarer,
-            SQUARER_BATCHING_DESC_V2,
-            batchingFlowController);
+    BatchAccumalator<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>>
+        batchAccumalator =
+            new BatchAccumalator<>(
+                callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingFlowController);
 
     //Testing add operation for single entry
     ApiFuture<Integer> result = batchAccumalator.add(4);
@@ -109,11 +107,10 @@ public class BatchAccumalatorTest {
     batchAccumalator.executeBatch();
     // Checking the result
     Truth.assertThat(result.get()).isEqualTo(16);
-    try{
+    try {
       // This should not throw any exception.
       batchAccumalator.executeBatch();
-    }
-    catch(Exception e){
+    } catch (Exception e) {
       Assert.fail("Should not have thrown any exception");
     }
   }

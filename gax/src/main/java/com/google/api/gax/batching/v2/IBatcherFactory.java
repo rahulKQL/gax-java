@@ -35,5 +35,4 @@ public interface IBatcherFactory<Entry, Result> {
    * Provides the {@link Batcher}, on which can directly be used to start batching for entry object.
    */
   Batcher<Entry, Result> createBatcher();
-
 }

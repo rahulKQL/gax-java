@@ -46,7 +46,7 @@ public class FlowController {
       super(e);
     }
 
-    private BatchingException(Exception e){
+    private BatchingException(Exception e) {
       super(e);
     }
 
@@ -54,11 +54,10 @@ public class FlowController {
       return new BatchingException(e);
     }
 
-    public static BatchingException fromException(Exception ex){
+    public static BatchingException fromException(Exception ex) {
       return new BatchingException(ex);
     }
   }
-
 
   /**
    * Runtime exception that can be used in place of FlowControlException when an unchecked exception

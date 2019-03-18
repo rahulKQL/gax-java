@@ -29,6 +29,9 @@
  */
 package com.google.api.gax.batching.v2;
 
+import static com.google.api.gax.batching.v2.FakeBatchableApiV2.SQUARER_BATCHING_DESC_V2;
+import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
+
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.gax.batching.BatchingSettings;
@@ -51,12 +54,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.threeten.bp.Duration;
 
-import static com.google.api.gax.batching.v2.FakeBatchableApiV2.SQUARER_BATCHING_DESC_V2;
-import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
-
 @RunWith(JUnit4.class)
 public class BatcherImplTest {
-
 
   private ScheduledExecutorService batchingExecutor;
   private ClientContext clientContext;
@@ -78,8 +77,8 @@ public class BatcherImplTest {
   }
 
   /**
-   * To test single entry object with new Batcher interface. It also verifies the functionality
-   * for DelayThreshold.
+   * To test single entry object with new Batcher interface. It also verifies the functionality for
+   * DelayThreshold.
    */
   @Test
   public void bachingWithDelayThreshold() throws Exception {
@@ -90,9 +89,9 @@ public class BatcherImplTest {
             .setRequestByteThreshold(null)
             .setElementCountThreshold(11L)
             .build();
-    try(Batcher<Integer, Integer> batcher = FakeCallableFactory
-        .createBatcher(callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingSettings,
-            clientContext)) {
+    try (Batcher<Integer, Integer> batcher =
+        FakeCallableFactory.createBatcher(
+            callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingSettings, clientContext)) {
 
       // Running batch with a single entry object.
       ApiFuture<Integer> singleResult = batcher.add(10);
@@ -108,9 +107,7 @@ public class BatcherImplTest {
     }
   }
 
-  /**
-   * Tests ElementCounterThreshold
-   */
+  /** Tests ElementCounterThreshold */
   @Test
   public void bacherWithElementThreshold() throws Exception {
     BatchingSettings batchingSettings =
@@ -119,9 +116,9 @@ public class BatcherImplTest {
             .setRequestByteThreshold(null)
             .setElementCountThreshold(5L)
             .build();
-    try(Batcher<Integer, Integer> batcher = FakeCallableFactory
-        .createBatcher(callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingSettings,
-            clientContext)) {
+    try (Batcher<Integer, Integer> batcher =
+        FakeCallableFactory.createBatcher(
+            callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingSettings, clientContext)) {
 
       List<ApiFuture<Integer>> results = new ArrayList<>();
       for (int i = 0; i < 4; i++) {

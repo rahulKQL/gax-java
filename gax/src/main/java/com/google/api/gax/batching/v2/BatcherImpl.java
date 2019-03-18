@@ -50,8 +50,7 @@ import org.threeten.bp.Duration;
  * thresholds is breached. then returned future gets completed.
  */
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
-public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batcher<EntryT,
-    ResultT> {
+public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batcher<EntryT, ResultT> {
 
   private final ArrayList<BatchingThreshold<EntryT>> thresholds;
   private final ScheduledExecutorService executor;
@@ -63,12 +62,13 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   private final ReentrantLock lock = new ReentrantLock();
   private BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> currentOpenBatch;
 
-  private final Runnable flushCurrentBatchRunnable = new Runnable() {
-    @Override
-    public void run() {
-      flush();
-    }
-  };
+  private final Runnable flushCurrentBatchRunnable =
+      new Runnable() {
+        @Override
+        public void run() {
+          flush();
+        }
+      };
 
   private BatcherImpl(Builder<EntryT, ResultT, RequestT, ResponseT> builder) {
     this.thresholds = new ArrayList<>(builder.thresholds);
@@ -87,7 +87,7 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     private Duration maxDelay;
     private BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> descriptor;
 
-    private Builder(){}
+    private Builder() {}
 
     public Builder<EntryT, ResultT, RequestT, ResponseT> setThresholds(
         List<BatchingThreshold<EntryT>> thresholds) {
@@ -96,17 +96,20 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     }
 
     /** Set the executor for the ThresholdBatcher. */
-    public Builder<EntryT, ResultT, RequestT, ResponseT> setExecutor(ScheduledExecutorService executor) {
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setExecutor(
+        ScheduledExecutorService executor) {
       this.executor = executor;
       return this;
     }
 
-    public Builder<EntryT, ResultT, RequestT, ResponseT> setUnaryCallable(UnaryCallable<RequestT, ResponseT> callable) {
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setUnaryCallable(
+        UnaryCallable<RequestT, ResponseT> callable) {
       this.callable = callable;
       return this;
     }
 
-    public Builder<EntryT, ResultT, RequestT, ResponseT> setFlowController(BatchingFlowController<EntryT> flowController) {
+    public Builder<EntryT, ResultT, RequestT, ResponseT> setFlowController(
+        BatchingFlowController<EntryT> flowController) {
       this.flowController = flowController;
       return this;
     }
@@ -129,7 +132,8 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
     }
   }
 
-  public static <EntryT, ResultT, RequestT, ResponseT> Builder<EntryT, ResultT, RequestT, ResponseT> newBuilder() {
+  public static <EntryT, ResultT, RequestT, ResponseT>
+      Builder<EntryT, ResultT, RequestT, ResponseT> newBuilder() {
     return new Builder<>();
   }
 

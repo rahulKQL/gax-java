@@ -127,10 +127,10 @@ public class FakeBatchableApiV2 {
     }
 
     @Override
-    public void splitResponse(List<Integer> batchResponse,
-        Collection<SettableApiFuture<Integer>> batch) {
+    public void splitResponse(
+        List<Integer> batchResponse, Collection<SettableApiFuture<Integer>> batch) {
       int index = 0;
-      for(SettableApiFuture<Integer> response : batch){
+      for (SettableApiFuture<Integer> response : batch) {
         response.set(batchResponse.get(index));
         index++;
       }
@@ -165,7 +165,8 @@ public class FakeBatchableApiV2 {
         batchingDescriptor;
 
     public RequestByteCounter(
-        BatchingDescriptor<Integer, Integer, LabeledIntList, List<java.lang.Integer>> batchingDescriptor) {
+        BatchingDescriptor<Integer, Integer, LabeledIntList, List<java.lang.Integer>>
+            batchingDescriptor) {
       this.batchingDescriptor = batchingDescriptor;
     }
 

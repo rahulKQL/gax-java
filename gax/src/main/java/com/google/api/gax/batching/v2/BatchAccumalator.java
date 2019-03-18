@@ -29,6 +29,8 @@
  */
 package com.google.api.gax.batching.v2;
 
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
+
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutureCallback;
 import com.google.api.core.ApiFutures;
@@ -39,11 +41,9 @@ import com.google.api.gax.rpc.UnaryCallable;
 import java.util.LinkedList;
 import java.util.List;
 
-import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
-
 /**
- * Accumulates entries in {@link RequestBuilder} and returns a future to the client. these
- * future are resolved once #executeBatch has been triggered.
+ * Accumulates entries in {@link RequestBuilder} and returns a future to the client. these future
+ * are resolved once #executeBatch has been triggered.
  */
 @InternalApi
 public class BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> {
@@ -56,7 +56,8 @@ public class BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> {
   private RequestBuilder<EntryT, RequestT> requestBuilder;
   private ApiFuture<ResponseT> responseFuture;
 
-  public BatchAccumalator(UnaryCallable<RequestT, ResponseT> callable,
+  public BatchAccumalator(
+      UnaryCallable<RequestT, ResponseT> callable,
       BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> descriptor,
       BatchingFlowController<EntryT> flowController) {
     this.callable = callable;
@@ -66,24 +67,25 @@ public class BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> {
     this.collectedResults = new LinkedList<>();
   }
 
-  /**
-   * Creates a future, and collects the entry object which is sent for batching.
-   */
+  /** Creates a future, and collects the entry object which is sent for batching. */
   public ApiFuture<ResultT> add(final EntryT entry) {
     SettableApiFuture<ResultT> resultFuture = SettableApiFuture.create();
     collectedResults.add(resultFuture);
     requestBuilder.add(entry);
-    ApiFutures.addCallback(resultFuture, new ApiFutureCallback<ResultT>() {
-      @Override
-      public void onFailure(Throwable t) {
-        flowController.release(entry);
-      }
+    ApiFutures.addCallback(
+        resultFuture,
+        new ApiFutureCallback<ResultT>() {
+          @Override
+          public void onFailure(Throwable t) {
+            flowController.release(entry);
+          }
 
-      @Override
-      public void onSuccess(ResultT result) {
-        flowController.release(entry);
-      }
-    }, directExecutor());
+          @Override
+          public void onSuccess(ResultT result) {
+            flowController.release(entry);
+          }
+        },
+        directExecutor());
 
     return resultFuture;
   }
@@ -98,16 +100,19 @@ public class BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> {
       return;
     }
     responseFuture = callable.futureCall(request);
-    ApiFutures.addCallback(responseFuture, new ApiFutureCallback<ResponseT>() {
-      @Override
-      public void onSuccess(ResponseT response) {
-        descriptor.splitResponse(response, collectedResults);
-      }
+    ApiFutures.addCallback(
+        responseFuture,
+        new ApiFutureCallback<ResponseT>() {
+          @Override
+          public void onSuccess(ResponseT response) {
+            descriptor.splitResponse(response, collectedResults);
+          }
 
-      @Override
-      public void onFailure(Throwable throwable) {
-        descriptor.splitException(throwable, collectedResults);
-      }
-    }, directExecutor());
+          @Override
+          public void onFailure(Throwable throwable) {
+            descriptor.splitException(throwable, collectedResults);
+          }
+        },
+        directExecutor());
   }
 }
