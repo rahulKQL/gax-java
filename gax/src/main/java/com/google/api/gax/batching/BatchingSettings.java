@@ -102,6 +102,7 @@ public abstract class BatchingSettings {
   @Nullable
   public abstract Duration getDelayThreshold();
 
+  @Deprecated
   /** Returns the Boolean object to indicate if the batching is enabled. Default to true */
   public abstract Boolean getIsEnabled();
 

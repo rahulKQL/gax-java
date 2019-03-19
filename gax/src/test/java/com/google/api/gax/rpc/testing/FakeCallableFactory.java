@@ -31,11 +31,10 @@ package com.google.api.gax.rpc.testing;
 
 import com.google.api.core.InternalApi;
 import com.google.api.gax.batching.BatchingSettings;
-import com.google.api.gax.batching.FlowController;
 import com.google.api.gax.batching.v2.Batcher;
 import com.google.api.gax.batching.v2.BatcherFactory;
 import com.google.api.gax.batching.v2.BatchingDescriptor;
-import com.google.api.gax.batching.v2.IBatcherFactory;
+import com.google.api.gax.batching.v2.DefaultBatcherFactory;
 import com.google.api.gax.longrunning.OperationSnapshot;
 import com.google.api.gax.rpc.BatchingCallSettings;
 import com.google.api.gax.rpc.BidiStreamingCallable;
@@ -239,15 +238,9 @@ public class FakeCallableFactory {
       ClientContext clientContext) {
     UnaryCallable<RequestT, ResponseT> defaultCallable =
         innerCallable.withDefaultCallContext(clientContext.getDefaultCallContext());
-    FlowController flowController = new FlowController(batchingSettings.getFlowControlSettings());
-    IBatcherFactory<EntryT, ResultT> batcherFactory =
-        BatcherFactory.<EntryT, ResultT, RequestT, ResponseT>newBuilder()
-            .setExecutor(clientContext.getExecutor())
-            .setBatchingDescriptor(batchingDesc)
-            .setFlowController(flowController)
-            .setBatchingSettings(batchingSettings)
-            .setUnaryCallable(defaultCallable)
-            .build();
+    BatcherFactory<EntryT, ResultT> batcherFactory =
+        new DefaultBatcherFactory<>(
+            batchingDesc, clientContext.getExecutor(), batchingSettings, defaultCallable);
     return batcherFactory.createBatcher();
   }
 }

@@ -33,7 +33,6 @@ import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.core.InternalApi;
 import com.google.api.core.SettableApiFuture;
-import com.google.api.gax.batching.ElementCounter;
 import com.google.api.gax.rpc.ApiCallContext;
 import com.google.api.gax.rpc.UnaryCallable;
 import java.util.ArrayList;
@@ -149,30 +148,6 @@ public class FakeBatchableApiV2 {
       // Limit the byte size to simulate merged messages having smaller serialized size that the
       // sum of their components
       return Math.min(entry, 5);
-    }
-  }
-
-  public static class RequestCounter<Integer> implements ElementCounter<Integer> {
-    @Override
-    public long count(Integer element) {
-      return 1;
-    }
-  }
-
-  public static class RequestByteCounter<Integer> implements ElementCounter<Integer> {
-
-    private BatchingDescriptor<Integer, Integer, LabeledIntList, List<java.lang.Integer>>
-        batchingDescriptor;
-
-    public RequestByteCounter(
-        BatchingDescriptor<Integer, Integer, LabeledIntList, List<java.lang.Integer>>
-            batchingDescriptor) {
-      this.batchingDescriptor = batchingDescriptor;
-    }
-
-    @Override
-    public long count(Integer element) {
-      return batchingDescriptor.countBytes(element);
     }
   }
 }

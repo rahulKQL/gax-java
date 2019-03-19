@@ -50,4 +50,10 @@ public interface Batcher<EntryT, ResultT> extends AutoCloseable {
 
   /** Closes the ScheduledExecutor if not shutdown yet. */
   void close();
+
+  /**
+   * Initiates an orderly shutdown in which previously submitted work is finished, but no new work
+   * will be accepted. Invocation has no additional effect if already shut down.
+   */
+  void shutdown();
 }

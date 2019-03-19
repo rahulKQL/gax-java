@@ -29,8 +29,13 @@
  */
 package com.google.api.gax.batching.v2;
 
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
+
 import com.google.api.core.ApiFuture;
+import com.google.api.core.ApiFutureCallback;
+import com.google.api.core.ApiFutures;
 import com.google.api.core.BetaApi;
+import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.batching.BatchingFlowController;
 import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.FlowController;
@@ -60,7 +65,10 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   private final BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> descriptor;
 
   private final ReentrantLock lock = new ReentrantLock();
-  private BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> currentOpenBatch;
+  private RequestBuilder<EntryT, RequestT> entries;
+  private List<SettableApiFuture<ResultT>> resultFutures;
+  private List<ApiFuture<ResponseT>> responses = new ArrayList<>();
+  private boolean isShutDown = false;
 
   private final Runnable flushCurrentBatchRunnable =
       new Runnable() {
@@ -139,33 +147,50 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
 
   /** {@inheritDoc} */
   @Override
-  public ApiFuture<ResultT> add(EntryT entry) {
+  public ApiFuture<ResultT> add(final EntryT entry) {
+    Preconditions.checkState(!isShutDown, "Cannot perform batching on a closed connection");
     lock.lock();
-    ApiFuture<ResultT> response = null;
     try {
       flowController.reserve(entry);
 
       boolean anyThresholdReached = isAnyThresholdReached(entry);
+      if (entries == null) {
+        entries = descriptor.getRequestBuilder();
+        resultFutures = new ArrayList<>();
 
-      if (currentOpenBatch == null) {
-        currentOpenBatch = createAccumalator();
+        // Scheduling a job with maxDelay, after each entries assignment.
+        if (!anyThresholdReached) {
+          executor.schedule(flushCurrentBatchRunnable, maxDelay.toMillis(), TimeUnit.MILLISECONDS);
+        }
       }
+      entries.add(entry);
+      SettableApiFuture<ResultT> result = SettableApiFuture.create();
+      resultFutures.add(result);
+      ApiFutures.addCallback(
+          result,
+          new ApiFutureCallback<ResultT>() {
+            @Override
+            public void onFailure(Throwable t) {
+              flowController.release(entry);
+            }
 
-      response = currentOpenBatch.add(entry);
-
-      if (!anyThresholdReached) {
-        executor.schedule(flushCurrentBatchRunnable, maxDelay.toMillis(), TimeUnit.MILLISECONDS);
-      }
+            @Override
+            public void onSuccess(ResultT result) {
+              flowController.release(entry);
+            }
+          },
+          directExecutor());
 
       if (anyThresholdReached) {
         flush();
       }
+
+      return result;
     } catch (FlowController.FlowControlException e) {
       throw BatchingException.fromFlowControlException(e);
     } finally {
       lock.unlock();
     }
-    return response;
   }
 
   /** {@inheritDoc} */
@@ -173,10 +198,31 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   public void flush() {
     lock.lock();
     try {
-      if (currentOpenBatch != null) {
-        currentOpenBatch.executeBatch();
-        currentOpenBatch = null;
+      if (entries != null) {
+        final RequestT request = entries.build();
+        entries = null;
 
+        final List<SettableApiFuture<ResultT>> results = resultFutures;
+        resultFutures = null;
+
+        final ApiFuture<ResponseT> responseFuture = callable.futureCall(request);
+        responses.add(responseFuture);
+        ApiFutures.addCallback(
+            responseFuture,
+            new ApiFutureCallback<ResponseT>() {
+              @Override
+              public void onSuccess(ResponseT response) {
+                responses.remove(responseFuture);
+                descriptor.splitResponse(response, results);
+              }
+
+              @Override
+              public void onFailure(Throwable throwable) {
+                responses.remove(responseFuture);
+                descriptor.splitException(throwable, results);
+              }
+            },
+            directExecutor());
         resetThresholds();
       }
     } finally {
@@ -187,19 +233,21 @@ public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batche
   /** {@inheritDoc} */
   @Override
   public void close() {
-    //TODO: Would it be better to use awitTermination instead of direct shutdown?
-    // But awitTermination blocks, which we might not want to do.
-    if (!executor.isShutdown()) {
-      executor.shutdown();
-    }
+    shutdown();
   }
 
-  /**
-   * Returns a fresh {@link BatchAccumalator}, which collects entry request and process them in
-   * batches.
-   */
-  private BatchAccumalator<EntryT, ResultT, RequestT, ResponseT> createAccumalator() {
-    return new BatchAccumalator<>(callable, descriptor, flowController);
+  @Override
+  public void shutdown() {
+    isShutDown = true;
+    flush();
+    if (!responses.isEmpty()) {
+      executor.shutdown();
+      try {
+        executor.awaitTermination(60, TimeUnit.SECONDS);
+      } catch (InterruptedException ex) {
+        throw BatchingException.fromException(ex);
+      }
+    }
   }
 
   private boolean isAnyThresholdReached(EntryT entry) {

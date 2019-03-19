@@ -31,13 +31,13 @@ package com.google.api.gax.batching.v2;
 
 import static com.google.api.gax.batching.v2.FakeBatchableApiV2.SQUARER_BATCHING_DESC_V2;
 import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSquarer;
+import static com.google.api.gax.rpc.testing.FakeCallableFactory.createBatcher;
 
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.gax.batching.BatchingSettings;
 import com.google.api.gax.rpc.ClientContext;
 import com.google.api.gax.rpc.testing.FakeCallContext;
-import com.google.api.gax.rpc.testing.FakeCallableFactory;
 import com.google.api.gax.rpc.testing.FakeChannel;
 import com.google.api.gax.rpc.testing.FakeTransportChannel;
 import com.google.common.truth.Truth;
@@ -49,7 +49,9 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.threeten.bp.Duration;
@@ -57,12 +59,13 @@ import org.threeten.bp.Duration;
 @RunWith(JUnit4.class)
 public class BatcherImplTest {
 
-  private ScheduledExecutorService batchingExecutor;
+  @Rule public ExpectedException expected = ExpectedException.none();
+
+  private ScheduledExecutorService batchingExecutor = new ScheduledThreadPoolExecutor(1);
   private ClientContext clientContext;
 
   @Before
   public void setUp() {
-    batchingExecutor = new ScheduledThreadPoolExecutor(1);
     clientContext =
         ClientContext.newBuilder()
             .setExecutor(batchingExecutor)
@@ -90,7 +93,7 @@ public class BatcherImplTest {
             .setElementCountThreshold(11L)
             .build();
     try (Batcher<Integer, Integer> batcher =
-        FakeCallableFactory.createBatcher(
+        createBatcher(
             callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingSettings, clientContext)) {
 
       // Running batch with a single entry object.
@@ -99,7 +102,7 @@ public class BatcherImplTest {
       Truth.assertThat(singleResult.isDone()).isFalse();
 
       // Allowing scheduler to trigger the flushing.
-      TimeUnit.SECONDS.sleep(2L);
+      TimeUnit.SECONDS.sleep(waitTime);
 
       // result should be in completed state now.
       Truth.assertThat(singleResult.isDone()).isTrue();
@@ -117,7 +120,7 @@ public class BatcherImplTest {
             .setElementCountThreshold(5L)
             .build();
     try (Batcher<Integer, Integer> batcher =
-        FakeCallableFactory.createBatcher(
+        createBatcher(
             callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingSettings, clientContext)) {
 
       List<ApiFuture<Integer>> results = new ArrayList<>();
@@ -134,5 +137,46 @@ public class BatcherImplTest {
       Truth.assertThat(completedResult.isDone()).isTrue();
       Truth.assertThat(completedResult.get()).isEqualTo(Arrays.asList(0, 1, 4, 9, 100));
     }
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void testWithClosedConn() throws Exception {
+    BatchingSettings batchingSettings =
+        BatchingSettings.newBuilder()
+            .setDelayThreshold(Duration.ofMillis(100))
+            .setRequestByteThreshold(200L)
+            .setElementCountThreshold(5L)
+            .build();
+    Batcher<Integer, Integer> closedBatcher = null;
+    try (Batcher<Integer, Integer> batcher =
+        createBatcher(
+            callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingSettings, clientContext)) {
+      closedBatcher = batcher;
+      Truth.assertThat(batcher.add(5).get()).isEqualTo(25);
+    }
+    closedBatcher.add(10);
+    expected.expectMessage("Cannot perform batching on a closed connection");
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void testShutdown() {
+    BatchingSettings batchingSettings =
+        BatchingSettings.newBuilder()
+            .setDelayThreshold(Duration.ofSeconds(10L))
+            .setRequestByteThreshold(200L)
+            .setElementCountThreshold(5L)
+            .build();
+    Batcher<Integer, Integer> batcher =
+        createBatcher(
+            callLabeledIntSquarer, SQUARER_BATCHING_DESC_V2, batchingSettings, clientContext);
+    ApiFuture<Integer> result = batcher.add(20);
+    Truth.assertThat(result.isDone()).isFalse();
+    batcher.shutdown();
+    Truth.assertThat(result.isDone()).isTrue();
+
+    // New job addition would result in exception.
+    batcher.add(10);
+    expected.expect(IllegalStateException.class);
+    expected.expectMessage("Cannot perform batching on a closed connection");
   }
 }

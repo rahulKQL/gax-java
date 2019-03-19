@@ -34,10 +34,7 @@ import static com.google.api.gax.batching.v2.FakeBatchableApiV2.callLabeledIntSq
 
 import com.google.api.core.ApiFuture;
 import com.google.api.gax.batching.BatchingSettings;
-import com.google.api.gax.batching.FlowControlSettings;
-import com.google.api.gax.batching.FlowController;
 import com.google.common.truth.Truth;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import org.junit.After;
@@ -48,7 +45,7 @@ import org.junit.runners.JUnit4;
 import org.threeten.bp.Duration;
 
 @RunWith(JUnit4.class)
-public class BatcherFactoryTest {
+public class DefaultBatcherFactoryTest {
 
   private ScheduledExecutorService batchingExecutor;
 
@@ -63,42 +60,25 @@ public class BatcherFactoryTest {
   }
 
   @Test
-  public void testBatcher() throws Exception {
-    //Setting long duration for DelayThreshold, so that it doesn't execute it before test finishes.
+  public void testCreateFactory() throws Exception {
+    // Setting long duration for DelayThreshold, so that it doesn't execute it before test finishes.
     BatchingSettings batchingSettings =
         BatchingSettings.newBuilder()
             .setDelayThreshold(Duration.ofSeconds(1000))
             .setElementCountThreshold(2L)
             .setRequestByteThreshold(1010L)
             .build();
-    FlowControlSettings flowControlSettings =
-        FlowControlSettings.newBuilder()
-            .setLimitExceededBehavior(FlowController.LimitExceededBehavior.Ignore)
-            .build();
-    FlowController flowController = new FlowController(flowControlSettings);
-    IBatcherFactory<Integer, Integer> batcherFactory =
-        BatcherFactory
-            .<Integer, Integer, FakeBatchableApiV2.LabeledIntList, List<Integer>>newBuilder()
-            .setExecutor(batchingExecutor)
-            .setBatchingDescriptor(SQUARER_BATCHING_DESC_V2)
-            .setFlowController(flowController)
-            .setBatchingSettings(batchingSettings)
-            .setUnaryCallable(callLabeledIntSquarer)
-            .build();
+    BatcherFactory<Integer, Integer> batcherFactory =
+        new DefaultBatcherFactory<>(
+            SQUARER_BATCHING_DESC_V2, batchingExecutor, batchingSettings, callLabeledIntSquarer);
 
     try (Batcher<Integer, Integer> batcher = batcherFactory.createBatcher()) {
       // Running batch with a single entry object.
-      ApiFuture<Integer> singleResult = batcher.add(10);
-
-      // ElementCounter doesn't triggers before reaching thresholds.
-      Truth.assertThat(singleResult.isDone()).isFalse();
-
-      ApiFuture<Integer> anotherResult = batcher.add(12);
-
+      ApiFuture<Integer> result = batcher.add(10);
+      batcher.flush();
       // Result should be completed now.
-      Truth.assertThat(singleResult.isDone()).isTrue();
-      Truth.assertThat(singleResult.get()).isEqualTo(100);
-      Truth.assertThat(anotherResult.get()).isEqualTo(144);
+      Truth.assertThat(result.isDone()).isTrue();
+      Truth.assertThat(result.get()).isEqualTo(100);
     }
   }
 }
