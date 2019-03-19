@@ -52,7 +52,7 @@ import org.threeten.bp.Duration;
 
 /**
  * Queues up elements until either a duration of time has passed or any threshold in a given set of
- * thresholds is breached. then returned future gets completed.
+ * thresholds is breached, then returned future gets completed.
  */
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
 public class BatcherImpl<EntryT, ResultT, RequestT, ResponseT> implements Batcher<EntryT, ResultT> {

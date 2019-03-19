@@ -60,6 +60,6 @@ public interface BatchingDescriptor<EntryT, ResultT, RequestT, ResponseT> {
    */
   void splitException(Throwable throwable, Collection<SettableApiFuture<ResultT>> batch);
 
-  /** Returns Counts bytes of a single entry object * */
+  /** Returns total bytes of a single entry object * */
   long countBytes(EntryT entry);
 }

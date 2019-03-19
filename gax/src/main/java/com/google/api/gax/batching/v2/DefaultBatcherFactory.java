@@ -42,8 +42,8 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * This class creates a fresh {@link Batcher}, which have fresh set of thresholds as List of {@link
- * NumericThreshold}.
+ * This class creates a new {@link Batcher}, which has a fresh set of thresholds as List of
+ * {@link NumericThreshold}.
  *
  * <p>This is public only for technical reasons, for advanced usage.
  */
@@ -129,7 +129,7 @@ public class DefaultBatcherFactory<EntryT, ResultT, RequestT, ResponseT>
 
   /**
    * Calculates bytes of an entry object sent for batching. Implementation of counting bytes are
-   * client dependent as it internally usage {@link BatchingDescriptor#countBytes(Object)}.
+   * client dependent as it internally uses {@link BatchingDescriptor#countBytes(Object)}.
    *
    * <p>This is public only for technical reasons, for advanced usage.
    */

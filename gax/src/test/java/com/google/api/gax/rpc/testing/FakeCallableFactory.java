@@ -228,7 +228,7 @@ public class FakeCallableFactory {
    * @param batchingDesc a {@link BatchingDescriptor} that wraps entries & wrapper objects.
    * @param batchingSettings {@link BatchingSettings} to configure the batching related * settings
    *     with.
-   * @param clientContext {@link ClientContext} to use to connect to t
+   * @param clientContext {@link ClientContext} to use to connect to the service.
    * @return a {@link Batcher} object.
    */
   public static <EntryT, ResultT, RequestT, ResponseT> Batcher<EntryT, ResultT> createBatcher(

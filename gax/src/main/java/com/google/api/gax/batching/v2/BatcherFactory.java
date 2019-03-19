@@ -32,7 +32,7 @@ package com.google.api.gax.batching.v2;
 public interface BatcherFactory<Entry, Result> {
 
   /**
-   * Provides the {@link Batcher}, on which can directly be used to start batching for entry object.
+   * Provides the {@link Batcher}, which can be used to start batching with entry object.
    */
   Batcher<Entry, Result> createBatcher();
 }

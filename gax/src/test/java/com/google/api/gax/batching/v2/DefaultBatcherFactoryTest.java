@@ -61,7 +61,7 @@ public class DefaultBatcherFactoryTest {
 
   @Test
   public void testCreateFactory() throws Exception {
-    // Setting long duration for DelayThreshold, so that it doesn't execute it before test finishes.
+    // Setting long duration for DelayThreshold, so that it should not finish before #flush call.
     BatchingSettings batchingSettings =
         BatchingSettings.newBuilder()
             .setDelayThreshold(Duration.ofSeconds(1000))
