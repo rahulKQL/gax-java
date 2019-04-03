@@ -34,7 +34,6 @@ import com.google.api.gax.batching.BatchingFlowController;
 import com.google.api.gax.batching.BatchingSettings;
 import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.ElementCounter;
-import com.google.api.gax.batching.FlowController;
 import com.google.api.gax.batching.NumericThreshold;
 import com.google.api.gax.rpc.UnaryCallable;
 import com.google.common.collect.ImmutableList;
@@ -56,20 +55,18 @@ public final class EntryBatcherFactory<EntryT, EntryResultT, RequestT, ResponseT
   private final RequestT prototype;
 
   public EntryBatcherFactory(
-      BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDescriptor,
+      EntryBatchingCallSettings<EntryT, EntryResultT, RequestT, ResponseT> batchingCallSetttings,
       ScheduledExecutorService executor,
-      BatchingSettings batchingSettings,
       UnaryCallable<RequestT, ResponseT> unaryCallable,
       RequestT prototype) {
-    this.batchingDescriptor = batchingDescriptor;
-    this.batchingSettings = batchingSettings;
     this.executor = executor;
-    FlowController flowController = new FlowController(batchingSettings.getFlowControlSettings());
+    this.batchingDescriptor = batchingCallSetttings.getBatchingDescriptor();
+    this.batchingSettings = batchingCallSetttings.getBatchingSettings();
     this.batchingFlowController =
         new BatchingFlowController<>(
-            flowController,
+            batchingCallSetttings.getFlowController(),
             new EntryCountThreshold<EntryT>(),
-            new EntryByteThreshold<>(batchingDescriptor));
+            new EntryByteThreshold<>(batchingCallSetttings.getBatchingDescriptor()));
     this.unaryCallable = unaryCallable;
     this.prototype = prototype;
   }

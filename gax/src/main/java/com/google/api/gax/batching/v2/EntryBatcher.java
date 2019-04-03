@@ -31,7 +31,6 @@ package com.google.api.gax.batching.v2;
 
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 
-import com.google.api.client.http.HttpStatusCodes;
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutureCallback;
 import com.google.api.core.ApiFutures;
@@ -40,19 +39,14 @@ import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.batching.BatchingFlowController;
 import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.FlowController;
-import com.google.api.gax.rpc.ApiException;
-import com.google.api.gax.rpc.ApiExceptionFactory;
 import com.google.api.gax.rpc.ApiExceptions;
-import com.google.api.gax.rpc.StatusCode;
 import com.google.api.gax.rpc.UnaryCallable;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import org.threeten.bp.Duration;
@@ -70,15 +64,16 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
   private final Duration maxDelay;
   private final BatchingFlowController<EntryT> flowController;
   private final BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDescriptor;
-
-  private final ReentrantLock lock = new ReentrantLock();
-  private Batch batch;
   private final UnaryCallable<RequestT, ResponseT> callable;
   private final RequestT prototype;
+
+  private final List<ApiFuture<ResponseT>> responseFutures = new CopyOnWriteArrayList<>();
+  private final ReentrantLock lock = new ReentrantLock();
+  private Batch batch;
   private boolean isClosed = false;
 
-  private List<ApiFuture<ResponseT>> responseFutures = new ArrayList<>();
-  private AtomicInteger numOfRpcCallInitiated = new AtomicInteger();
+  //  private List<ApiFuture<ResponseT>> responseFutures = new ArrayList<>();
+  private AtomicInteger numOfRpcs = new AtomicInteger();
 
   private final Runnable flushCurrentBatchRunnable =
       new Runnable() {
@@ -124,7 +119,6 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
 
       SettableApiFuture<EntryResultT> result = SettableApiFuture.create();
       batch.add(entry, result);
-      numOfRpcCallInitiated.incrementAndGet();
       ApiFutures.addCallback(
           result,
           new ApiFutureCallback<EntryResultT>() {
@@ -158,22 +152,23 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
     if (batch != null) {
       final Batch accumulatedBatch = batch;
       batch = null;
-      executor.schedule(new Runnable() {
-        @Override
-        public void run() {
-          sendBatch(accumulatedBatch);
-        }},
-          1, TimeUnit.MILLISECONDS);
+      sendBatch(accumulatedBatch);
       resetThresholds();
     }
+    //    if(numOfRpcs.get() != 0){
+    //      //Await using CountDownLatch???
+    //
+    //    }
     lock.unlock();
   }
 
-  private void sendBatch(final Batch batch){
-    try{
+  private void sendBatch(final Batch batch) {
+    try {
+      // Per Batch incrementing the AtomicInteger.
+      numOfRpcs.incrementAndGet();
+
       // Makes either Unary or Streaming call and splits the response
       final ApiFuture<ResponseT> currentBatchResponse = callable.futureCall(batch.build());
-
       responseFutures.add(currentBatchResponse);
       ApiFutures.addCallback(
           currentBatchResponse,
@@ -181,15 +176,18 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
             @Override
             public void onSuccess(ResponseT response) {
               batch.splitResponse(response);
+              numOfRpcs.decrementAndGet();
               responseFutures.remove(currentBatchResponse);
             }
 
             @Override
             public void onFailure(Throwable throwable) {
               batch.splitException(throwable);
+              numOfRpcs.decrementAndGet();
               responseFutures.remove(currentBatchResponse);
             }
-          }, directExecutor());
+          },
+          directExecutor());
       ApiExceptions.callAndTranslateApiException(currentBatchResponse);
     } catch (Exception e) {
       throw new RuntimeException("some message", e);
@@ -225,33 +223,34 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
   }
 
   //TODO: It is just encapsulating request & response... do we really need this?
-  class Batch{
+  class Batch {
 
     private final BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> descriptor;
     private final RequestBuilder<EntryT, RequestT> builder;
     private final List<SettableApiFuture<EntryResultT>> results;
 
-    private Batch(BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> descriptor,
-        RequestT prototype){
+    private Batch(
+        BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> descriptor,
+        RequestT prototype) {
       this.descriptor = descriptor;
       this.builder = descriptor.newRequestBuilder(prototype);
       this.results = new ArrayList<>();
     }
 
-    void add(EntryT entry, SettableApiFuture<EntryResultT> result){
+    void add(EntryT entry, SettableApiFuture<EntryResultT> result) {
       builder.add(entry);
       results.add(result);
     }
 
-    RequestT build(){
+    RequestT build() {
       return builder.build();
     }
 
-    void splitResponse(ResponseT response){
+    void splitResponse(ResponseT response) {
       descriptor.splitResponse(response, results);
     }
 
-    void splitException(Throwable throwable){
+    void splitException(Throwable throwable) {
       descriptor.splitException(throwable, results);
     }
   }
