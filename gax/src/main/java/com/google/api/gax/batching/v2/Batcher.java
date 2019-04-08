@@ -44,7 +44,7 @@ import com.google.api.core.ApiFuture;
  * </pre>
  *
  * @param <EntryT> Type for which this class performs batching.
- * @param <ResultT> Return type of a single entry object.
+ * @param <EntryResultT> Return type of a single entry object.
  */
 public interface Batcher<EntryT, EntryResultT> extends AutoCloseable {
 
@@ -68,11 +68,11 @@ public interface Batcher<EntryT, EntryResultT> extends AutoCloseable {
    *
    * <p>Note: This operation is a blocking operation.
    */
-  void flush();
+  void flush() throws InterruptedException;
 
   /**
    * Prevents new entries from being added, flushes the existing entries and waits for all of them
    * to finish.
    */
-  void close();
+  void close() throws InterruptedException;
 }

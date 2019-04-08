@@ -39,16 +39,14 @@ import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.batching.BatchingFlowController;
 import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.FlowController;
-import com.google.api.gax.rpc.ApiExceptions;
 import com.google.api.gax.rpc.UnaryCallable;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 import org.threeten.bp.Duration;
 
 /**
@@ -59,6 +57,8 @@ import org.threeten.bp.Duration;
 public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
     implements Batcher<EntryT, EntryResultT> {
 
+  @VisibleForTesting private static final long DEFAULT_FINISH_WAIT_MILLIS = 250;
+
   private final ArrayList<BatchingThreshold<EntryT>> thresholds;
   private final ScheduledExecutorService executor;
   private final Duration maxDelay;
@@ -67,19 +67,19 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
   private final UnaryCallable<RequestT, ResponseT> callable;
   private final RequestT prototype;
 
-  private final List<ApiFuture<ResponseT>> responseFutures = new CopyOnWriteArrayList<>();
-  private final ReentrantLock lock = new ReentrantLock();
+  private final Object lock = new Object();
+
   private Batch batch;
   private boolean isClosed = false;
 
   //  private List<ApiFuture<ResponseT>> responseFutures = new ArrayList<>();
   private AtomicInteger numOfRpcs = new AtomicInteger();
 
-  private final Runnable flushCurrentBatchRunnable =
+  private final Runnable currentBatchRunnable =
       new Runnable() {
         @Override
         public void run() {
-          flush();
+          sendBatch();
         }
       };
 
@@ -102,18 +102,17 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
 
   /** {@inheritDoc} */
   @Override
-  public ApiFuture<EntryResultT> add(final EntryT entry) {
+  public synchronized ApiFuture<EntryResultT> add(final EntryT entry) {
     Preconditions.checkState(!isClosed, "Cannot perform batching on a closed connection");
-    lock.lock();
     try {
       flowController.reserve(entry);
       boolean anyThresholdReached = isAnyThresholdReached(entry);
       if (batch == null) {
-        batch = new Batch(batchingDescriptor, prototype);
+        batch = new Batch(batchingDescriptor.newRequestBuilder(prototype));
 
         // Scheduling a job with maxDelay, after each entries assignment.
         if (!anyThresholdReached) {
-          executor.schedule(flushCurrentBatchRunnable, maxDelay.toMillis(), TimeUnit.MILLISECONDS);
+          executor.schedule(currentBatchRunnable, maxDelay.toMillis(), TimeUnit.MILLISECONDS);
         }
       }
 
@@ -135,60 +134,56 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
           directExecutor());
 
       if (anyThresholdReached) {
-        flush();
+        sendBatch();
       }
       return result;
     } catch (FlowController.FlowControlException e) {
       throw new RuntimeException();
-    } finally {
-      lock.unlock();
     }
   }
 
   /** {@inheritDoc} */
   @Override
-  public void flush() {
-    lock.lock();
-    if (batch != null) {
-      final Batch accumulatedBatch = batch;
-      batch = null;
-      sendBatch(accumulatedBatch);
-      resetThresholds();
+  public void flush() throws InterruptedException {
+    while (numOfRpcs.get() > 0) {
+      synchronized (lock) {
+        if (numOfRpcs.get() > 0) {
+          lock.wait(DEFAULT_FINISH_WAIT_MILLIS);
+        }
+      }
     }
-    //    if(numOfRpcs.get() != 0){
-    //      //Await using CountDownLatch???
-    //
-    //    }
-    lock.unlock();
   }
 
-  private void sendBatch(final Batch batch) {
+  private synchronized void sendBatch() {
     try {
+      if (batch == null) {
+        return;
+      }
+      final Batch accumulatedBatch = batch;
+      batch = null;
+
       // Per Batch incrementing the AtomicInteger.
       numOfRpcs.incrementAndGet();
 
-      // Makes either Unary or Streaming call and splits the response
-      final ApiFuture<ResponseT> currentBatchResponse = callable.futureCall(batch.build());
-      responseFutures.add(currentBatchResponse);
+      final ApiFuture<ResponseT> batchResponse =
+          callable.futureCall(accumulatedBatch.builder.build());
       ApiFutures.addCallback(
-          currentBatchResponse,
+          batchResponse,
           new ApiFutureCallback<ResponseT>() {
             @Override
             public void onSuccess(ResponseT response) {
-              batch.splitResponse(response);
-              numOfRpcs.decrementAndGet();
-              responseFutures.remove(currentBatchResponse);
+              batchingDescriptor.splitResponse(response, accumulatedBatch.results);
+              onCompletion();
             }
 
             @Override
             public void onFailure(Throwable throwable) {
-              batch.splitException(throwable);
-              numOfRpcs.decrementAndGet();
-              responseFutures.remove(currentBatchResponse);
+              batchingDescriptor.splitException(throwable, accumulatedBatch.results);
+              onCompletion();
             }
           },
           directExecutor());
-      ApiExceptions.callAndTranslateApiException(currentBatchResponse);
+      resetThresholds();
     } catch (Exception e) {
       throw new RuntimeException("some message", e);
     }
@@ -196,14 +191,9 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
 
   /** {@inheritDoc} */
   @Override
-  public void close() {
+  public void close() throws InterruptedException {
     isClosed = true;
     flush();
-    try {
-      ApiFutures.allAsList(responseFutures).get(10, TimeUnit.MINUTES);
-    } catch (Exception ex) {
-      throw new RuntimeException("Some exception occurred while in RPC call", ex);
-    }
   }
 
   private boolean isAnyThresholdReached(EntryT entry) {
@@ -222,36 +212,31 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
     }
   }
 
-  //TODO: It is just encapsulating request & response... do we really need this?
-  class Batch {
+  private void onCompletion() {
+    if (numOfRpcs.decrementAndGet() == 0) {
+      synchronized (lock) {
+        lock.notifyAll();
+      }
+    }
+  }
 
-    private final BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> descriptor;
+  /**
+   * This class represent one logical Batch which holds all the request accumulated and it's
+   *
+   * <p>corresponding future result.
+   */
+  class Batch {
     private final RequestBuilder<EntryT, RequestT> builder;
     private final List<SettableApiFuture<EntryResultT>> results;
 
-    private Batch(
-        BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> descriptor,
-        RequestT prototype) {
-      this.descriptor = descriptor;
-      this.builder = descriptor.newRequestBuilder(prototype);
+    private Batch(RequestBuilder<EntryT, RequestT> builder) {
+      this.builder = builder;
       this.results = new ArrayList<>();
     }
 
     void add(EntryT entry, SettableApiFuture<EntryResultT> result) {
       builder.add(entry);
       results.add(result);
-    }
-
-    RequestT build() {
-      return builder.build();
-    }
-
-    void splitResponse(ResponseT response) {
-      descriptor.splitResponse(response, results);
-    }
-
-    void splitException(Throwable throwable) {
-      descriptor.splitException(throwable, results);
     }
   }
 }
