@@ -40,7 +40,6 @@ import com.google.api.gax.batching.BatchingFlowController;
 import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.FlowController;
 import com.google.api.gax.rpc.UnaryCallable;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,7 +56,7 @@ import org.threeten.bp.Duration;
 public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
     implements Batcher<EntryT, EntryResultT> {
 
-  @VisibleForTesting private static final long DEFAULT_FINISH_WAIT_MILLIS = 250;
+  private static final long DEFAULT_FINISH_WAIT_MILLIS = 250;
 
   private final ArrayList<BatchingThreshold<EntryT>> thresholds;
   private final ScheduledExecutorService executor;
