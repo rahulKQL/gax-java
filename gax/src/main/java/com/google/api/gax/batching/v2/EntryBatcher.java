@@ -74,6 +74,7 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
 
   //  private List<ApiFuture<ResponseT>> responseFutures = new ArrayList<>();
   private AtomicInteger numOfRpcs = new AtomicInteger();
+  private long failedEntires;
 
   private final Runnable currentBatchRunnable =
       new Runnable() {
@@ -124,6 +125,7 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
             @Override
             public void onFailure(Throwable t) {
               flowController.release(entry);
+              failedEntires++;
             }
 
             @Override
@@ -138,7 +140,7 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
       }
       return result;
     } catch (FlowController.FlowControlException e) {
-      throw new RuntimeException();
+      throw new BatchingException(failedEntires, "Some Message", e);
     }
   }
 
@@ -185,7 +187,7 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
           directExecutor());
       resetThresholds();
     } catch (Exception e) {
-      throw new RuntimeException("some message", e);
+      throw new BatchingException(failedEntires, "some message", e);
     }
   }
 
