@@ -33,21 +33,24 @@ import com.google.api.core.BetaApi;
 import com.google.api.core.InternalExtensionOnly;
 import com.google.api.gax.batching.BatchingSettings;
 import com.google.api.gax.batching.FlowController;
+import com.google.api.gax.retrying.RetrySettings;
+import com.google.api.gax.rpc.StatusCode;
 import com.google.api.gax.rpc.UnaryCallSettings;
 import com.google.common.base.Preconditions;
+import java.util.Set;
 
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
 @InternalExtensionOnly
-public final class BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> {
+public final class BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT>
+    extends UnaryCallSettings<RequestT, ResponseT> {
   private final BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDescriptor;
   private final BatchingSettings batchingSettings;
   private final FlowController flowController;
-  private final UnaryCallSettings<RequestT, ResponseT> unaryCallSettings;
 
-  protected BatcherSettings(Builder<EntryT, EntryResultT, RequestT, ResponseT> builder) {
+  private BatcherSettings(Builder<EntryT, EntryResultT, RequestT, ResponseT> builder) {
+    super(builder);
     this.batchingDescriptor = builder.batchingDescriptor;
     this.batchingSettings = Preconditions.checkNotNull(builder.batchingSettings);
-    this.unaryCallSettings = Preconditions.checkNotNull(builder.unaryCallSettings);
     FlowController flowControllerToUse = builder.flowController;
     if (flowControllerToUse == null) {
       flowControllerToUse = new FlowController(batchingSettings.getFlowControlSettings());
@@ -67,26 +70,23 @@ public final class BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> {
     return flowController;
   }
 
-  public UnaryCallSettings<RequestT, ResponseT> getUnaryCallSettings() {
-    return unaryCallSettings;
-  }
-
   public static <EntryT, EntryResultT, RequestT, ResponseT>
       Builder<EntryT, EntryResultT, RequestT, ResponseT> newBuilder(
           BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDescriptor) {
     return new Builder<>(batchingDescriptor);
   }
 
+  @Override
   public final Builder<EntryT, EntryResultT, RequestT, ResponseT> toBuilder() {
     return new Builder<>(this);
   }
 
-  public static class Builder<EntryT, EntryResultT, RequestT, ResponseT> {
+  public static class Builder<EntryT, EntryResultT, RequestT, ResponseT>
+      extends UnaryCallSettings.Builder<RequestT, ResponseT> {
 
     private BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDescriptor;
     private BatchingSettings batchingSettings;
     private FlowController flowController;
-    private UnaryCallSettings<RequestT, ResponseT> unaryCallSettings;
 
     public Builder(
         BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDescriptor) {
@@ -97,7 +97,6 @@ public final class BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> {
       this.batchingDescriptor = settings.batchingDescriptor;
       this.batchingSettings = settings.batchingSettings;
       this.flowController = settings.flowController;
-      this.unaryCallSettings = settings.unaryCallSettings;
     }
 
     public BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> getBatchingDescriptor() {
@@ -107,12 +106,6 @@ public final class BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> {
     public Builder<EntryT, EntryResultT, RequestT, ResponseT> setBatchingSettings(
         BatchingSettings batchingSettings) {
       this.batchingSettings = batchingSettings;
-      return this;
-    }
-
-    public Builder<EntryT, EntryResultT, RequestT, ResponseT> setUnaryCallSettings(
-        UnaryCallSettings<RequestT, ResponseT> unaryCallSettings) {
-      this.unaryCallSettings = unaryCallSettings;
       return this;
     }
 
@@ -130,6 +123,28 @@ public final class BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> {
       return flowController;
     }
 
+    @Override
+    public Builder<EntryT, EntryResultT, RequestT, ResponseT> setRetryableCodes(
+        Set<StatusCode.Code> retryableCodes) {
+      super.setRetryableCodes(retryableCodes);
+      return this;
+    }
+
+    @Override
+    public Builder<EntryT, EntryResultT, RequestT, ResponseT> setRetryableCodes(
+        StatusCode.Code... codes) {
+      super.setRetryableCodes(codes);
+      return this;
+    }
+
+    @Override
+    public Builder<EntryT, EntryResultT, RequestT, ResponseT> setRetrySettings(
+        RetrySettings retrySettings) {
+      super.setRetrySettings(retrySettings);
+      return this;
+    }
+
+    @Override
     public BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> build() {
       return new BatcherSettings<>(this);
     }

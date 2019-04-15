@@ -53,7 +53,7 @@ import org.threeten.bp.Duration;
  * thresholds is breached, then returned future gets completed.
  */
 @BetaApi("The surface for batching is not stable yet and may change in the future.")
-public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
+public class BatcherImpl<EntryT, EntryResultT, RequestT, ResponseT>
     implements Batcher<EntryT, EntryResultT> {
 
   private static final long DEFAULT_FINISH_WAIT_MILLIS = 250;
@@ -82,7 +82,7 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
         }
       };
 
-  EntryBatcher(
+  BatcherImpl(
       List<BatchingThreshold<EntryT>> thresholds,
       ScheduledExecutorService executor,
       Duration maxDelay,
@@ -218,8 +218,7 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
 
   /**
    * This class represent one logical Batch which holds all the request accumulated and it's
-   *
-   * <p>corresponding future result.
+   * corresponding future result.
    */
   class Batch {
     private final RequestBuilder<EntryT, RequestT> builder;

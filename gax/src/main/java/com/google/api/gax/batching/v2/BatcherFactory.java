@@ -80,7 +80,7 @@ public final class BatcherFactory<EntryT, EntryResultT, RequestT, ResponseT> {
    * UnaryCallable} RPC request.
    */
   public Batcher<EntryT, EntryResultT> createBatcher() {
-    return new EntryBatcher<>(
+    return new BatcherImpl<>(
         getThresholds(batchingSettings),
         executor,
         batchingSettings.getDelayThreshold(),
