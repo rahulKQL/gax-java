@@ -31,14 +31,12 @@ package com.google.api.gax.batching.v2;
 
 import com.google.common.annotations.VisibleForTesting;
 
-/**
- * This exception provides facility pass count of failed entries during RPC.
- */
+/** This exception provides facility pass count of failed entries during RPC. */
 public class BatchingException extends RuntimeException {
   private final long failedEntires;
 
   @VisibleForTesting
-  BatchingException(long failedEntires, String message, Throwable cause) {
+  BatchingException(String message, long failedEntires, Throwable cause) {
     super(message, cause);
     this.failedEntires = failedEntires;
   }

@@ -71,7 +71,6 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
   private Batch batch;
   private boolean isClosed = false;
 
-  //  private List<ApiFuture<ResponseT>> responseFutures = new ArrayList<>();
   private AtomicInteger numOfRpcs = new AtomicInteger();
   private long failedEntires;
 
@@ -139,7 +138,7 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
       }
       return result;
     } catch (FlowController.FlowControlException e) {
-      throw new BatchingException(failedEntires, "Some Message", e);
+      throw new BatchingException("Exception occurred while performing batching", failedEntires, e);
     }
   }
 
@@ -156,43 +155,39 @@ public class EntryBatcher<EntryT, EntryResultT, RequestT, ResponseT>
   }
 
   private synchronized void sendBatch() {
-    try {
-      if (batch == null) {
-        return;
-      }
-      final Batch accumulatedBatch = batch;
-      batch = null;
-
-      // Per Batch incrementing the AtomicInteger.
-      numOfRpcs.incrementAndGet();
-
-      final ApiFuture<ResponseT> batchResponse =
-          callable.futureCall(accumulatedBatch.builder.build());
-      ApiFutures.addCallback(
-          batchResponse,
-          new ApiFutureCallback<ResponseT>() {
-            @Override
-            public void onSuccess(ResponseT response) {
-              batchingDescriptor.splitResponse(response, accumulatedBatch.results);
-              onCompletion();
-            }
-
-            @Override
-            public void onFailure(Throwable throwable) {
-              batchingDescriptor.splitException(throwable, accumulatedBatch.results);
-              onCompletion();
-            }
-          },
-          directExecutor());
-      resetThresholds();
-    } catch (Exception e) {
-      throw new BatchingException(failedEntires, "some message", e);
+    if (batch == null) {
+      return;
     }
+    final Batch accumulatedBatch = batch;
+    batch = null;
+
+    // Per Batch incrementing the AtomicInteger.
+    numOfRpcs.incrementAndGet();
+
+    final ApiFuture<ResponseT> batchResponse =
+        callable.futureCall(accumulatedBatch.builder.build());
+    ApiFutures.addCallback(
+        batchResponse,
+        new ApiFutureCallback<ResponseT>() {
+          @Override
+          public void onSuccess(ResponseT response) {
+            batchingDescriptor.splitResponse(response, accumulatedBatch.results);
+            onCompletion();
+          }
+
+          @Override
+          public void onFailure(Throwable throwable) {
+            batchingDescriptor.splitException(throwable, accumulatedBatch.results);
+            onCompletion();
+          }
+        },
+        directExecutor());
+    resetThresholds();
   }
 
   /** {@inheritDoc} */
   @Override
-  public void close() throws InterruptedException {
+  public void close() throws Exception {
     isClosed = true;
     flush();
   }

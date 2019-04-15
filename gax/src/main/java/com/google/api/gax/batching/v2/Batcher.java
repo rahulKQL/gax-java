@@ -66,7 +66,7 @@ public interface Batcher<EntryT, EntryResultT> extends AutoCloseable {
    * and byte count threshold that be configured via {@link
    * com.google.api.gax.batching.BatchingSettings}.
    *
-   * <p>Note: This operation is a blocking operation.
+   * <p>Note: This is a blocking operation.
    */
   void flush() throws InterruptedException;
 
@@ -74,5 +74,6 @@ public interface Batcher<EntryT, EntryResultT> extends AutoCloseable {
    * Prevents new entries from being added, flushes the existing entries and waits for all of them
    * to finish.
    */
-  void close() throws InterruptedException;
+  @Override
+  void close() throws Exception;
 }

@@ -29,7 +29,16 @@
  */
 package com.google.api.gax.batching.v2;
 
+import com.google.api.core.BetaApi;
+import com.google.api.gax.batching.BatchingFlowController;
+import com.google.api.gax.batching.BatchingSettings;
+import com.google.api.gax.batching.BatchingThreshold;
+import com.google.api.gax.batching.ElementCounter;
+import com.google.api.gax.batching.NumericThreshold;
 import com.google.api.gax.rpc.UnaryCallable;
+import com.google.common.collect.ImmutableList;
+import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * This interface is the user-visible entry point for batching. It should returns a fresh {@link
@@ -40,11 +49,102 @@ import com.google.api.gax.rpc.UnaryCallable;
  *
  * <p>Implementation of the same must include the thresholds to apply constraints on batch session.
  */
-public interface BatcherFactory<EntryT, EntryResultT> {
+@BetaApi("The surface for batching is not stable yet and may change in the future.")
+public final class BatcherFactory<EntryT, EntryResultT, RequestT, ResponseT> {
+  private final ScheduledExecutorService executor;
+  private final BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDescriptor;
+  private final BatchingSettings batchingSettings;
+  private final BatchingFlowController<EntryT> batchingFlowController;
+  private final UnaryCallable<RequestT, ResponseT> unaryCallable;
+  private final RequestT prototype;
+
+  public BatcherFactory(
+      BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> batcherSettings,
+      ScheduledExecutorService executor,
+      UnaryCallable<RequestT, ResponseT> unaryCallable,
+      RequestT prototype) {
+    this.executor = executor;
+    this.batchingDescriptor = batcherSettings.getBatchingDescriptor();
+    this.batchingSettings = batcherSettings.getBatchingSettings();
+    this.batchingFlowController =
+        new BatchingFlowController<>(
+            batcherSettings.getFlowController(),
+            new EntryCountThreshold<EntryT>(),
+            new EntryByteThreshold<>(batcherSettings.getBatchingDescriptor()));
+    this.unaryCallable = unaryCallable;
+    this.prototype = prototype;
+  }
 
   /**
    * Provides the {@link Batcher}, which performs batching with entry object over {@link
    * UnaryCallable} RPC request.
    */
-  Batcher<EntryT, EntryResultT> createBatcher();
+  public Batcher<EntryT, EntryResultT> createBatcher() {
+    return new EntryBatcher<>(
+        getThresholds(batchingSettings),
+        executor,
+        batchingSettings.getDelayThreshold(),
+        batchingFlowController,
+        unaryCallable,
+        batchingDescriptor,
+        prototype);
+  }
+
+  /**
+   * Returns {@link List} of different thresholds based on values present in {@link
+   * BatchingSettings}.
+   *
+   * <p>This is public only for technical reasons, for advanced usage.
+   */
+  private List<BatchingThreshold<EntryT>> getThresholds(BatchingSettings batchingSettings) {
+    ImmutableList.Builder<BatchingThreshold<EntryT>> listBuilder = ImmutableList.builder();
+
+    final Long elementCount = batchingSettings.getElementCountThreshold();
+    if (elementCount != null) {
+      ElementCounter<EntryT> elementCounter = new EntryCountThreshold<>();
+
+      BatchingThreshold<EntryT> countThreshold =
+          new NumericThreshold<>(elementCount, elementCounter);
+      listBuilder.add(countThreshold);
+    }
+
+    final Long byteCount = batchingSettings.getRequestByteThreshold();
+    if (byteCount != null) {
+      ElementCounter<EntryT> requestByte = new EntryByteThreshold<>(batchingDescriptor);
+
+      BatchingThreshold<EntryT> byteThreshold = new NumericThreshold<>(byteCount, requestByte);
+      listBuilder.add(byteThreshold);
+    }
+    return listBuilder.build();
+  }
+
+  /**
+   * As each Entry object will be considered one single element in the set, so it returns 1 for each
+   * count.
+   */
+  private static class EntryCountThreshold<EntryT> implements ElementCounter<EntryT> {
+    @Override
+    public long count(EntryT element) {
+      return 1;
+    }
+  }
+
+  /**
+   * Calculates bytes of an entry object sent for batching. Implementation of counting bytes are
+   * client dependent as it internally uses {@link BatchingDescriptor#countBytes(Object)}.
+   */
+  private static class EntryByteThreshold<EntryT, EntryResultT, RequestT, ResponseT>
+      implements ElementCounter<EntryT> {
+
+    private final BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDesc;
+
+    EntryByteThreshold(BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDesc) {
+      this.batchingDesc = batchingDesc;
+    }
+
+    @Override
+    public long count(EntryT element) {
+      return batchingDesc.countBytes(element);
+    }
+  }
 }
