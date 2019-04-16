@@ -45,7 +45,7 @@ public interface BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> {
   RequestBuilder<EntryT, RequestT> newRequestBuilder(RequestT prototype);
 
   /**
-   * Splits the result from an RPC into respective future of {@link EntryResultT} to mark them
+   * Splits the response from an RPC into respective future of {@link EntryResultT} to mark them
    * resolved.
    */
   void splitResponse(ResponseT batchResponse, List<SettableApiFuture<EntryResultT>> batch);

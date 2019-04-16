@@ -37,8 +37,11 @@ import com.google.api.core.ApiFutures;
 import com.google.api.core.BetaApi;
 import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.batching.BatchingFlowController;
+import com.google.api.gax.batching.BatchingSettings;
 import com.google.api.gax.batching.BatchingThreshold;
 import com.google.api.gax.batching.FlowController;
+import com.google.api.gax.batching.v2.BatcherUtil.EntryByteThreshold;
+import com.google.api.gax.batching.v2.BatcherUtil.EntryCountThreshold;
 import com.google.api.gax.rpc.UnaryCallable;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
@@ -82,23 +85,68 @@ public class BatcherImpl<EntryT, EntryResultT, RequestT, ResponseT>
         }
       };
 
-  BatcherImpl(
-      List<BatchingThreshold<EntryT>> thresholds,
-      ScheduledExecutorService executor,
-      Duration maxDelay,
-      BatchingFlowController<EntryT> flowController,
-      UnaryCallable<RequestT, ResponseT> callable,
-      BatchingDescriptor<EntryT, EntryResultT, RequestT, ResponseT> batchingDescriptor,
-      RequestT prototype) {
-    this.thresholds = new ArrayList<>(thresholds);
-    this.executor = Preconditions.checkNotNull(executor);
-    this.maxDelay = Preconditions.checkNotNull(maxDelay);
-    this.flowController = Preconditions.checkNotNull(flowController);
-    this.batchingDescriptor = Preconditions.checkNotNull(batchingDescriptor);
-    this.callable = Preconditions.checkNotNull(callable);
-    this.prototype = Preconditions.checkNotNull(prototype);
+  private BatcherImpl(Builder<EntryT, EntryResultT, RequestT, ResponseT> builder) {
+    this.executor = Preconditions.checkNotNull(builder.executor);
+    this.prototype = Preconditions.checkNotNull(builder.prototype);
+    this.callable = Preconditions.checkNotNull(builder.unaryCallable);
+
+    BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> batcherSettings =
+        Preconditions.checkNotNull(builder.batcherSettings);
+    BatchingSettings settings = batcherSettings.getBatchingSettings();
+    this.batchingDescriptor = batcherSettings.getBatchingDescriptor();
+    this.maxDelay = settings.getDelayThreshold();
+    this.flowController =
+        new BatchingFlowController<>(
+            batcherSettings.getFlowController(),
+            new EntryCountThreshold<EntryT>(),
+            new EntryByteThreshold<>(batcherSettings.getBatchingDescriptor()));
+    this.thresholds = new ArrayList<>(BatcherUtil.getThresholds(settings, batchingDescriptor));
   }
 
+  public static class Builder<EntryT, EntryResultT, RequestT, ResponseT> {
+    private ScheduledExecutorService executor;
+    private BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> batcherSettings;
+    private UnaryCallable<RequestT, ResponseT> unaryCallable;
+    private RequestT prototype;
+
+    private Builder() {}
+
+    /** Set the executor for the ThresholdBatcher. */
+    public Builder<EntryT, EntryResultT, RequestT, ResponseT> setExecutor(
+        ScheduledExecutorService executor) {
+      this.executor = executor;
+      return this;
+    }
+
+    public Builder<EntryT, EntryResultT, RequestT, ResponseT> setBatcherSettings(
+        BatcherSettings<EntryT, EntryResultT, RequestT, ResponseT> batcherSettings) {
+      this.batcherSettings = batcherSettings;
+      return this;
+    }
+
+    public Builder<EntryT, EntryResultT, RequestT, ResponseT> setUnaryCallable(
+        UnaryCallable<RequestT, ResponseT> unaryCallable) {
+      this.unaryCallable = unaryCallable;
+      return this;
+    }
+
+    public Builder<EntryT, EntryResultT, RequestT, ResponseT> setPrototype(RequestT prototype) {
+      this.prototype = prototype;
+      return this;
+    }
+
+    /** Build the BatcherImpl */
+    public BatcherImpl<EntryT, EntryResultT, RequestT, ResponseT> build() {
+      return new BatcherImpl<>(this);
+    }
+  }
+
+  public static <EntryT, EntryResultT, RequestT, ResponseT>
+      Builder<EntryT, EntryResultT, RequestT, ResponseT> newBuilder() {
+    return new Builder<>();
+  }
+
+  // API operations
   /** {@inheritDoc} */
   @Override
   public synchronized ApiFuture<EntryResultT> add(final EntryT entry) {
