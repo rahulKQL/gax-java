@@ -42,9 +42,12 @@ import com.google.api.gax.rpc.UnaryCallable;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.threeten.bp.Duration;
 
 /**
  * Queues up the elements until {@link #flush()} is called, once batching is finished returned
@@ -57,12 +60,23 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class BatcherImpl<ElementT, ElementResultT, RequestT, ResponseT>
     implements Batcher<ElementT, ElementResultT> {
 
+  private final Runnable pushCurrentBatchRunnable =
+      new Runnable() {
+        @Override
+        public void run() {
+          sendBatch();
+        }
+      };
+
   /** The amount of time to wait before checking responses are received or not. */
   private final BatchingDescriptor<ElementT, ElementResultT, RequestT, ResponseT>
       batchingDescriptor;
 
   private final UnaryCallable<RequestT, ResponseT> callable;
   private final RequestT prototype;
+  private final List<BatchingThreshold<ElementT>> thresholds;
+  private final ScheduledExecutorService executor;
+  private final Duration maxDelay;
 
   private final AtomicInteger numOfRpcs = new AtomicInteger(0);
   private final AtomicBoolean isFlushed = new AtomicBoolean(false);
@@ -75,6 +89,14 @@ public class BatcherImpl<ElementT, ElementResultT, RequestT, ResponseT>
     this.callable = checkNotNull(builder.unaryCallable, "UnaryCallable cannot be null.");
     this.batchingDescriptor =
         checkNotNull(builder.batchingDescriptor, "BatchingDescriptor cannot be null.");
+    this.executor = checkNotNull(builder.executor, "Executor service cannot be null.");
+    BatchingSettings batchingSettings =
+        checkNotNull(builder.batchingSettings, "Batching Setting cannot be null.");
+    this.maxDelay = batchingSettings.getDelayThreshold();
+
+    List<BatchingThreshold<ElementT>> immutableThresholds =
+        new BatchUtils<>(batchingDescriptor, batchingSettings).getThresholds();
+    this.thresholds = new ArrayList<>(immutableThresholds);
   }
 
   /** Builder for a BatcherImpl. */
@@ -82,13 +104,41 @@ public class BatcherImpl<ElementT, ElementResultT, RequestT, ResponseT>
     private BatchingDescriptor<ElementT, ElementResultT, RequestT, ResponseT> batchingDescriptor;
     private UnaryCallable<RequestT, ResponseT> unaryCallable;
     private RequestT prototype;
+    private ScheduledExecutorService executor;
+    private BatchingSettings batchingSettings;
 
     private Builder() {}
+
+    public Builder<ElementT, ElementResultT, RequestT, ResponseT> setExecutor(
+        ScheduledExecutorService executor) {
+      this.executor = executor;
+      return this;
+    }
+
+    public Builder<ElementT, ElementResultT, RequestT, ResponseT> setMaxDelay(Duration maxDelay) {
+      this.batchingSettings = batchingSettings.toBuilder().setDelayThreshold(maxDelay).build();
+      return this;
+    }
+
+    public Builder<ElementT, ElementResultT, RequestT, ResponseT> setBatchingSettings(
+        BatchingSettings batchingSettings) {
+      this.batchingSettings = batchingSettings;
+      return this;
+    }
+
+    public BatchingSettings getBatchingSettings() {
+      return batchingSettings;
+    }
 
     public Builder<ElementT, ElementResultT, RequestT, ResponseT> setBatchingDescriptor(
         BatchingDescriptor<ElementT, ElementResultT, RequestT, ResponseT> batchingDescriptor) {
       this.batchingDescriptor = batchingDescriptor;
       return this;
+    }
+
+    public BatchingDescriptor<ElementT, ElementResultT, RequestT, ResponseT>
+        getBatchingDescriptor() {
+      return batchingDescriptor;
     }
 
     public Builder<ElementT, ElementResultT, RequestT, ResponseT> setUnaryCallable(
@@ -117,12 +167,21 @@ public class BatcherImpl<ElementT, ElementResultT, RequestT, ResponseT>
   public ApiFuture<ElementResultT> add(ElementT element) {
     Preconditions.checkState(!isClosed, "Cannot add elements on a closed batcher.");
 
+    boolean anyThresholdReached = isAnyThresholdReached(element);
+
     if (currentOpenBatch == null) {
       currentOpenBatch = new Batch<>(batchingDescriptor.newRequestBuilder(prototype));
     }
 
     SettableApiFuture<ElementResultT> result = SettableApiFuture.create();
     currentOpenBatch.add(element, result);
+
+    if (anyThresholdReached) {
+      sendBatch();
+    } else {
+      executor.schedule(pushCurrentBatchRunnable, maxDelay.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
     return result;
   }
 
@@ -178,6 +237,8 @@ public class BatcherImpl<ElementT, ElementResultT, RequestT, ResponseT>
           }
         },
         directExecutor());
+
+    resetThresholds();
   }
 
   private void onCompletion() {
@@ -192,6 +253,22 @@ public class BatcherImpl<ElementT, ElementResultT, RequestT, ResponseT>
   public void close() throws InterruptedException {
     isClosed = true;
     flush();
+  }
+
+  private boolean isAnyThresholdReached(ElementT element) {
+    for (BatchingThreshold<ElementT> threshold : thresholds) {
+      threshold.accumulate(element);
+      if (threshold.isThresholdReached()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private void resetThresholds() {
+    for (int i = 0; i < thresholds.size(); i++) {
+      thresholds.set(i, thresholds.get(i).copyWithZeroedValue());
+    }
   }
 
   /**

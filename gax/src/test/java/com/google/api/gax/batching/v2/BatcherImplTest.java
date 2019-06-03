@@ -38,14 +38,21 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutures;
 import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.rpc.UnaryCallable;
 import com.google.api.gax.rpc.testing.FakeBatchableApi.LabeledIntList;
+import com.google.api.gax.rpc.testing.FakeBatchableApi.SquarerBatchingDescriptorV2;
+import com.google.common.truth.Truth;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -54,9 +61,13 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+import org.threeten.bp.Duration;
 
 @RunWith(JUnit4.class)
 public class BatcherImplTest {
+
+  private static final ScheduledExecutorService EXECUTOR =
+      Executors.newSingleThreadScheduledExecutor();
 
   @Rule public MockitoRule rule = MockitoJUnit.rule();
   @Mock private UnaryCallable<LabeledIntList, List<Integer>> mockUnaryCallable;
@@ -64,6 +75,15 @@ public class BatcherImplTest {
 
   private Batcher<Integer, Integer> underTest;
   private LabeledIntList labeledIntList = new LabeledIntList("Default");
+  private BatchingSettings batchingSettings =
+      BatchingSettings.newBuilder()
+          .setDelayThreshold(Duration.ofMinutes(1))
+          .setRequestByteThreshold(1000L)
+          .setElementCountThreshold(1000L)
+          .build();
+
+  @Before
+  public void setUp() {}
 
   /** Tests accumulated element are resolved when {@link Batcher#flush()} is called. */
   @Test
@@ -204,11 +224,114 @@ public class BatcherImplTest {
         .splitException(any(Throwable.class), Mockito.<SettableApiFuture<Integer>>anyList());
   }
 
+  /** Tests accumulated element are resolved when {@link Batcher#flush()} is called. */
+  @Test
+  public void testBatchingWithCallable() throws Exception {
+    BatchingSettings batchSet =
+        BatchingSettings.newBuilder()
+            .setElementCountThreshold(101L)
+            .setRequestByteThreshold(3000L)
+            .setDelayThreshold(Duration.ofMillis(10000))
+            .build();
+    underTest = createNewBatcherBuilder().setBatchingSettings(batchSet).build();
+    int limit = 100;
+    int batch = 10;
+    List<ApiFuture<Integer>> resultList = new ArrayList<>(limit);
+    for (int i = 0; i <= limit; i++) {
+      resultList.add(underTest.add(i));
+      if (i % batch == 0) {
+        underTest.flush();
+        for (int j = i - batch; j >= 0 && j < i; j++) {
+          Truth.assertThat(resultList.get(j).isDone()).isTrue();
+          Truth.assertThat(resultList.get(j).get()).isEqualTo(j * j);
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testBatchingWhenThresholdExceeds() throws ExecutionException, InterruptedException {
+    BatchingSettings settings = batchingSettings.toBuilder().setElementCountThreshold(2L).build();
+    underTest = createNewBatcherBuilder().setBatchingSettings(settings).build();
+    Future result = underTest.add(2);
+    assertThat(result.isDone()).isFalse();
+    // After this element is added, Batch will be trigger sendBatch().
+    Future anotherResult = underTest.add(3);
+    // Both the element should be resolved now.
+    assertThat(result.isDone()).isTrue();
+    assertThat(result.get()).isEqualTo(4);
+    assertThat(anotherResult.isDone()).isTrue();
+
+    settings = batchingSettings.toBuilder().setRequestByteThreshold(2L).build();
+    underTest = createNewBatcherBuilder().setBatchingSettings(settings).build();
+    result = underTest.add(4);
+    assertThat(result.isDone()).isFalse();
+    // After this element is added, Batch will be trigger sendBatch().
+    anotherResult = underTest.add(5);
+    // Both the element should be resolved now.
+    assertThat(result.isDone()).isTrue();
+    assertThat(result.get()).isEqualTo(16);
+    assertThat(anotherResult.isDone()).isTrue();
+
+    underTest = createNewBatcherBuilder().setMaxDelay(Duration.ofMillis(200)).build();
+    result = underTest.add(6);
+    assertThat(result.isDone()).isFalse();
+    // Give time for the delay to trigger and push the batch
+    Thread.sleep(300);
+    assertThat(result.isDone()).isTrue();
+    assertThat(result.get()).isEqualTo(36);
+  }
+
+  @Test
+  public void testSynchronousFlush() throws Exception {
+    final long expectedTimeToSleep = 300L;
+    BatchingDescriptor<Integer, Integer, LabeledIntList, List<Integer>> desc =
+        new SquarerBatchingDescriptorV2() {
+          @Override
+          public void splitResponse(
+              List<Integer> batchResponse, List<SettableApiFuture<Integer>> batch) {
+            try {
+              Thread.sleep(expectedTimeToSleep);
+            } catch (InterruptedException e) {
+              e.printStackTrace();
+            }
+            super.splitResponse(batchResponse, batch);
+          }
+        };
+    underTest =
+        createNewBatcherBuilder()
+            .setBatchingDescriptor(desc)
+            .setMaxDelay(Duration.ofMillis(50))
+            .build();
+    long startTime = System.currentTimeMillis();
+    Future result = underTest.add(2);
+    // Give time for the delay to trigger and push the batch through executor.
+    Thread.sleep(50);
+    underTest.flush();
+    long totalTime = System.currentTimeMillis() - startTime;
+    assertThat(totalTime).isAtLeast(expectedTimeToSleep + 50);
+    assertThat(result.isDone()).isTrue();
+  }
+
+  @Test
+  public void testBatcherImplBuilderGetters() {
+    BatcherImpl.Builder<Integer, Integer, LabeledIntList, List<Integer>> builder =
+        createNewBatcherBuilder();
+    assertThat(builder.getBatchingDescriptor()).isSameAs(SQUARER_BATCHING_DESC_V2);
+    assertThat(builder.getBatchingSettings()).isSameAs(batchingSettings);
+    Duration maxDelay = Duration.ofMillis(100);
+    builder.setMaxDelay(maxDelay);
+    BatchingSettings settings = batchingSettings.toBuilder().setDelayThreshold(maxDelay).build();
+    assertThat(builder.getBatchingSettings()).isEqualTo(settings);
+  }
+
   private BatcherImpl.Builder<Integer, Integer, LabeledIntList, List<Integer>>
       createNewBatcherBuilder() {
     return BatcherImpl.<Integer, Integer, LabeledIntList, List<Integer>>newBuilder()
         .setPrototype(labeledIntList)
         .setUnaryCallable(callLabeledIntSquarer)
-        .setBatchingDescriptor(SQUARER_BATCHING_DESC_V2);
+        .setBatchingDescriptor(SQUARER_BATCHING_DESC_V2)
+        .setExecutor(EXECUTOR)
+        .setBatchingSettings(batchingSettings);
   }
 }
