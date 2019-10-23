@@ -30,12 +30,12 @@
 package com.google.api.gax.batching;
 
 import static com.google.common.truth.Truth.assertThat;
+
 import com.google.api.core.SettableApiFuture;
 import com.google.api.gax.rpc.ApiExceptionFactory;
 import com.google.api.gax.rpc.StatusCode;
 import com.google.api.gax.rpc.testing.FakeStatusCode;
 import com.google.common.collect.ImmutableList;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -90,6 +90,5 @@ public class BatcherStatsTest {
     assertThat(ex.getMessage()).contains("1 IllegalStateException");
     assertThat(ex.getMessage()).contains("1 NullPointerException");
     assertThat(ex.getMessage()).contains("1 ApiException (1 UNAVAILABLE )");
-
   }
 }

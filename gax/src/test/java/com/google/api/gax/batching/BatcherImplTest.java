@@ -499,7 +499,9 @@ public class BatcherImplTest {
     }
     assertThat(actualError).isInstanceOf(BatchingException.class);
     assertThat(actualError.getMessage()).contains("Batching finished with 2 partial failures.");
-    assertThat(actualError.getMessage()).contains("The 2 partial failures contained 3 entries that failed with: 3 ArithmeticException .");
+    assertThat(actualError.getMessage())
+        .contains(
+            "The 2 partial failures contained 3 entries that failed with: 3 ArithmeticException .");
   }
 
   @Test

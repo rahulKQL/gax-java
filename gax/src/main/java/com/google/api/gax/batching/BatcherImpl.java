@@ -162,7 +162,6 @@ public class BatcherImpl<ElementT, ElementResultT, RequestT, ResponseT>
         unaryCallable.futureCall(accumulatedBatch.builder.build());
 
     numOfOutstandingBatches.incrementAndGet();
-
     ApiFutures.addCallback(
         batchResponse,
         new ApiFutureCallback<ResponseT>() {

@@ -29,6 +29,8 @@
  */
 package com.google.api.gax.batching;
 
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
+
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutureCallback;
 import com.google.api.core.ApiFutures;
@@ -41,8 +43,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
-
-import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 
 /**
  * This class keeps the statistics about failed operations(both at RPC and ElementT level) in {@link
@@ -126,9 +126,6 @@ class BatcherStats {
           },
           directExecutor());
     }
-
-    //
-
   }
 
   /** Calculates and formats the message with request and entry failure count. */
@@ -148,10 +145,11 @@ class BatcherStats {
       } else {
         sb.append(String.format("%d batches failed to apply due to: ", batchFailures));
 
-        // compose the exception and return it
-        for (Class req : requestExceptionCounts.keySet()) {
-          sb.append(String.format("%d %s ", requestExceptionCounts.get(req), req.getSimpleName()));
-          if (req.equals(ApiException.class)) {
+        for (Class request : requestExceptionCounts.keySet()) {
+          sb.append(
+              String.format(
+                  "%d %s ", requestExceptionCounts.get(request), request.getSimpleName()));
+          if (request.equals(ApiException.class)) {
 
             sb.append("(");
             for (StatusCode.Code statusCode : requestStatusCounts.keySet()) {
